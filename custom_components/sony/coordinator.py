@@ -12,7 +12,7 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 import requests
 
 from .api import SonyAuthenticationError, SonyClient, SonyConnectionError, SonyStatus
-from .const import DEVICE_SCAN_INTERVAL, DOMAIN
+from .const import CONF_COOKIES, DEVICE_SCAN_INTERVAL, DOMAIN
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -39,11 +39,18 @@ class SonyCoordinator(DataUpdateCoordinator[SonyStatus]):
         """Fetch state in an executor, without exposing library internals."""
         async with self._lock:
             try:
-                return await self.hass.async_add_executor_job(self.client.refresh)
+                status = await self.hass.async_add_executor_job(self.client.refresh)
             except SonyAuthenticationError as err:
                 raise ConfigEntryAuthFailed(str(err)) from err
             except (SonyConnectionError, requests.RequestException, ValueError) as err:
                 raise UpdateFailed(str(err)) from err
+            cookies = self.client.cookies
+            if cookies != self.config_entry.data.get(CONF_COOKIES, []):
+                self.hass.config_entries.async_update_entry(
+                    self.config_entry,
+                    data={**self.config_entry.data, CONF_COOKIES: cookies},
+                )
+            return status
 
     async def _async_execute(self, method: Callable[..., Any], *args: Any) -> None:
         """Serialize commands with polling because the library stores mutable state."""

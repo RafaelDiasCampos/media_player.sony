@@ -1,11 +1,15 @@
 """Exercise real sonyapilib registration and wire requests with mock HTTP."""
 
 import base64
+import json
 import struct
 from unittest.mock import patch
 from xml.etree import ElementTree
 
 from homeassistant.components.media_player import MediaPlayerState
+from homeassistant.config_entries import SOURCE_USER, ConfigEntryState
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.helpers import device_registry as dr
 import pytest
 import requests
 from sonyapilib.device import AuthenticationResult
@@ -15,6 +19,7 @@ from custom_components.sony.api import (
     SonyClient,
     SonyConnectionError,
 )
+from custom_components.sony.const import CONF_COOKIES, DOMAIN
 
 from .conftest import ENTRY_DATA, HOST, MAC
 
@@ -94,10 +99,119 @@ def test_real_pin_handshake_and_restart(legacy_http):
     assert client.device.mac == MAC
     assert client.model == "BDV-E2100"
     assert client.refresh().state == MediaPlayerState.PLAYING
-    # Startup must rebuild registration from the saved PIN, not skip it.
+    # Startup verifies the existing registration without consuming the PIN again.
     restored = SonyClient({**ENTRY_DATA, "pin": client.pin})
     assert restored.refresh().state == MediaPlayerState.PLAYING
     assert restored.device.commands["Up"].value == "AAAAAQAAAAEAAAB0Aw=="
+
+
+@pytest.fixture(params=[False, True], ids=["client-id", "cookie"])
+def single_use_legacy_http(legacy_http, request):
+    """A CERS device accepts a displayed PIN only once, then rejects /register."""
+    registered = False
+    require_cookie = request.param
+
+    def commands(request, context):
+        if not registered or (
+            require_cookie
+            and "auth=legacy-session" not in request.headers.get("Cookie", "")
+        ):
+            context.status_code = 403
+            return "Forbidden"
+        return COMMAND_LIST
+
+    def register(request, context):
+        nonlocal registered
+        if registered or request.headers.get("Authorization") != "Basic OjAxMjM=":
+            context.status_code = 401
+            return "Unauthorized"
+        registered = True
+        if require_cookie:
+            context.headers["Set-Cookie"] = "auth=legacy-session; Path=/"
+        return "<ok />"
+
+    legacy_http.get(f"http://{HOST}:50001/commands", text=commands)
+    legacy_http.get(REGISTER_URL, text=register)
+    return legacy_http
+
+
+async def test_single_use_pin_survives_setup_and_reload(hass, single_use_legacy_http):
+    """The real PIN flow must create entities and survive a new runtime client."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}, data={"host": HOST}
+    )
+    assert result["step_id"] == "pin"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"pin": "0123"}
+    )
+    assert result["type"] == FlowResultType.CREATE_ENTRY
+    await hass.async_block_till_done()
+    entry = result["result"]
+    assert entry.state is ConfigEntryState.LOADED
+    assert (
+        len(dr.async_entries_for_config_entry(dr.async_get(hass), entry.entry_id)) == 1
+    )
+    assert (
+        len([state for state in hass.states.async_all() if state.domain == "remote"])
+        == 1
+    )
+    saved_data = json.loads(json.dumps(dict(entry.data)))
+    registration_count = sum(
+        item.url.startswith(REGISTER_URL)
+        for item in single_use_legacy_http.request_history
+    )
+
+    assert await hass.config_entries.async_reload(entry.entry_id)
+    await hass.async_block_till_done()
+    assert entry.state is ConfigEntryState.LOADED
+    assert (
+        sum(
+            item.url.startswith(REGISTER_URL)
+            for item in single_use_legacy_http.request_history
+        )
+        == registration_count
+    )
+
+    # A completely new client can use only the JSON-serializable saved data.
+    assert SonyClient(saved_data).refresh().state is MediaPlayerState.PLAYING
+    assert not list(hass.config_entries.flow.async_progress())
+
+
+def test_revoked_registration_never_replays_pin(single_use_legacy_http):
+    """Revoked authorization must request reauth without silently registering."""
+    client = SonyClient(ENTRY_DATA)
+    assert client.authenticate("0123") is AuthenticationResult.SUCCESS
+    saved_data = {**ENTRY_DATA, CONF_COOKIES: client.cookies}
+    single_use_legacy_http.get(f"http://{HOST}:50001/commands", status_code=403)
+    registration_count = sum(
+        item.url.startswith(REGISTER_URL)
+        for item in single_use_legacy_http.request_history
+    )
+    with pytest.raises(SonyAuthenticationError):
+        SonyClient(saved_data).refresh()
+    assert (
+        sum(
+            item.url.startswith(REGISTER_URL)
+            for item in single_use_legacy_http.request_history
+        )
+        == registration_count
+    )
+
+
+def test_saved_basic_credential_does_not_register(legacy_http):
+    """Devices with reusable Basic credentials can restore older config entries."""
+
+    def commands(request, context):
+        if request.headers.get("Authorization") != "Basic OjAxMjM=":
+            context.status_code = 403
+            return "Forbidden"
+        return COMMAND_LIST
+
+    legacy_http.get(f"http://{HOST}:50001/commands", text=commands)
+    assert SonyClient(ENTRY_DATA).refresh().state is MediaPlayerState.PLAYING
+    assert not any(
+        item.url.startswith(REGISTER_URL) for item in legacy_http.request_history
+    )
 
 
 def test_ircc_keeps_authentication_headers(legacy_http):
@@ -278,6 +392,9 @@ def scalar_http(requests_mock):
         method = request.json()["method"]
         if method == "getSystemSupportedFunction":
             return {"result": [[{"option": "WOL", "value": MAC}]]}
+        if "auth=sony-test-cookie" not in request.headers.get("Cookie", ""):
+            context.status_code = 403
+            return {"error": [403, "Forbidden"]}
         if method == "getRemoteControllerInfo":
             return {
                 "result": [
@@ -316,7 +433,38 @@ def test_scalar_pairing_cookie_and_restart(scalar_http):
     client.send_command("Up")
     assert "auth=sony-test-cookie" in scalar_http.last_request.headers["Cookie"]
     assert client.refresh().state == MediaPlayerState.PLAYING
-    assert SonyClient(ENTRY_DATA).refresh().state == MediaPlayerState.PLAYING
+    saved_data = {**ENTRY_DATA, CONF_COOKIES: client.cookies}
+    scalar_http.post(f"http://{HOST}/sony/accessControl", status_code=401)
+    restored = SonyClient(saved_data)
+    assert restored.refresh().state == MediaPlayerState.PLAYING
+    restored.send_command("Up")
+    assert "auth=sony-test-cookie" in scalar_http.last_request.headers["Cookie"]
+
+
+def test_cookie_scope_and_expiry_survive_restart(scalar_http):
+    """Persist cookie path, domain, security and expiry instead of only its value."""
+    client = SonyClient(ENTRY_DATA)
+    client.device.cookies.set(
+        "auth",
+        "scoped-cookie",
+        domain=HOST,
+        path="/sony",
+        secure=True,
+        expires=2000000000,
+    )
+    assert (
+        SonyClient({**ENTRY_DATA, CONF_COOKIES: client.cookies}).cookies
+        == client.cookies
+    )
+
+
+def test_scalar_missing_cookie_requires_pairing(scalar_http):
+    """An old PIN alone cannot replace a missing Scalar registration cookie."""
+    with pytest.raises(SonyAuthenticationError):
+        SonyClient(ENTRY_DATA).refresh()
+    assert not any(
+        item.url.endswith("/accessControl") for item in scalar_http.request_history
+    )
 
 
 def test_scalar_already_registered_without_pin(scalar_http):

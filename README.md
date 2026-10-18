@@ -16,14 +16,17 @@ Physical-device testing is still required for individual models and firmware.
 5. Open **Settings > Devices & services > Add integration** and search for
    **Sony Legacy API**.
 
-This fork includes the updated code (integration version **2.1.0**) on its
+This fork includes the updated code (integration version **2.1.1**) on its
 `master` branch. The older
 `c264add` revision lacks required HACS metadata and remains incompatible with
 HACS. Add this fork's URL to HACS, as shown above.
 
 This repository can be installed as a **custom repository**; inclusion in HACS's
-default catalog is a separate submission. A GitHub release is optional for custom
-repositories. Without releases, HACS downloads the default branch.
+default catalog is a separate submission. Select the latest versioned release
+when downloading. If HACS offers only a short commit such as `9c054c0` and reports
+an archive 404, use **Update information**, then **Redownload** and select the
+latest release or `master` with **Show beta versions** enabled. A short commit
+identifier is not a branch name and cannot be downloaded as `refs/heads/<commit>`.
 
 ### Manual installation
 
@@ -69,6 +72,10 @@ verified on the device. This update does not claim hardware validation for them.
 Existing version 2.0.0 config entries and entity unique IDs are retained. You do
 not need YAML configuration or a `sony.conf` file. If the device revokes its saved
 registration, Home Assistant offers a reauthentication flow for the existing entry.
+The displayed PIN can be single-use. Successful pairing saves the registration
+cookies, where provided, and setup verifies the approved client without starting
+registration again. Updating from 2.1.0 may require one new PIN through the
+existing entry's **Reconfigure** prompt; restarting then reuses that registration.
 
 ## Controls
 

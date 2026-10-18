@@ -36,3 +36,24 @@ jobs:
         with:
           category: integration
           comment: false
+
+  release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    needs: [tests, hassfest]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5
+      - name: Publish a release for a new integration version
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          version=$(python3 -c 'import json; print(json.load(open("custom_components/sony/manifest.json"))["version"])')
+          tag="v${version}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            exit 0
+          fi
+          gh release create "$tag" --target "$GITHUB_SHA" \
+            --title "Sony Legacy API ${version}" --generate-notes

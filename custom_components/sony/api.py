@@ -13,10 +13,11 @@ from xml.sax.saxutils import escape
 from homeassistant.components.media_player import MediaPlayerState
 from homeassistant.const import CONF_HOST
 import requests
-from sonyapilib.device import AuthenticationResult, HttpMethod, SonyDevice
+from sonyapilib.device import AuthenticationResult, HttpMethod, SonyDevice, XmlApiObject
 
 from .const import (
     CONF_APP_PORT,
+    CONF_COOKIES,
     CONF_DMR_PORT,
     CONF_IRCC_PORT,
     CONF_MAC_ADDRESS,
@@ -44,12 +45,24 @@ class SonyStatus:
     commands: tuple[str, ...]
 
 
+class _SonyDevice(SonyDevice):
+    """Retain cookies from legacy registration as well as Scalar registration."""
+
+    def _send_http(self, url: str, method: HttpMethod, **kwargs: Any):
+        response = super()._send_http(url, method, **kwargs)
+        if response is not None and response.cookies:
+            if self.cookies is None:
+                self.cookies = requests.cookies.RequestsCookieJar()
+            self.cookies.update(response.cookies)
+        return response
+
+
 class SonyClient:
     """Expose registration, polling and IRCC commands without hiding errors."""
 
     def __init__(self, data: Mapping[str, Any]) -> None:
         """Create a client without performing network I/O."""
-        self.device = SonyDevice(
+        self.device = _SonyDevice(
             data[CONF_HOST],
             DEFAULT_DEVICE_NAME,
             app_port=data.get(CONF_APP_PORT, DEFAULT_APP_PORT),
@@ -57,10 +70,28 @@ class SonyClient:
             ircc_port=data.get(CONF_IRCC_PORT, DEFAULT_IRCC_PORT),
         )
         self.device.mac = data.get(CONF_MAC_ADDRESS)
+        self.device.cookies = requests.cookies.RequestsCookieJar()
+        for cookie in data.get(CONF_COOKIES, []):
+            self.device.cookies.set_cookie(requests.cookies.create_cookie(**cookie))
         self.pin = data.get(CONF_PIN)
         self.model: str | None = None
         self._discovered = False
         self._authenticated = False
+
+    @property
+    def cookies(self) -> list[dict[str, Any]]:
+        """Return JSON-safe credentials, retaining cookie scope and expiry."""
+        return [
+            {
+                "name": cookie.name,
+                "value": cookie.value,
+                "domain": cookie.domain,
+                "path": cookie.path,
+                "secure": cookie.secure,
+                "expires": cookie.expires,
+            }
+            for cookie in self.device.cookies or ()
+        ]
 
     def _request(
         self, url: str, method: HttpMethod, **kwargs: Any
@@ -84,7 +115,9 @@ class SonyClient:
             raise SonyConnectionError("Sony returned no response")
         return response
 
-    def authenticate(self, pin: str | None = None) -> AuthenticationResult:
+    def authenticate(
+        self, pin: str | None = None, *, resume: bool = False
+    ) -> AuthenticationResult:
         """Discover and register, optionally using the PIN displayed on the TV."""
         if not self._discovered:
             response = self._request(self.device.dmr_url, HttpMethod.GET)
@@ -109,6 +142,22 @@ class SonyClient:
                 )
             self._discovered = True
 
+        if resume and "register" in self.device.actions:
+            # A displayed PIN may be single-use. Check the registered client ID
+            # and saved cookies without calling /register or opening a new PIN.
+            try:
+                self._load_commands()
+            except SonyAuthenticationError:
+                if not self.pin:
+                    raise
+                # Some older devices use a reusable Basic credential instead.
+                # Retry the protected resource, never the registration endpoint.
+                self.device.pin = self.pin
+                self.device._recreate_authentication()
+                self._load_commands()
+            self._authenticated = True
+            return AuthenticationResult.SUCCESS
+
         # Some older IRCC-only devices have no registration endpoint.
         if "register" not in self.device.actions:
             if not self.device.commands:
@@ -128,14 +177,61 @@ class SonyClient:
                 "Sony registration failed; check remote access settings"
             )
         if result == AuthenticationResult.SUCCESS:
-            # Scalar devices can accept registration without requesting a PIN.
-            if self.device.api_version >= 4 and not self.device.commands:
-                self.device._parse_command_list_v4()
+            if "register" in self.device.actions:
+                self._load_commands()
             if not self.device.commands:
                 raise SonyConnectionError("Cannot read the Sony remote command list")
             self.pin = str(self.device.pin) if self.device.pin is not None else None
             self._authenticated = True
         return result
+
+    def _load_commands(self) -> None:
+        """Verify saved authorization against a fresh, protected command list."""
+        action = self.device.actions.get("getRemoteCommandList")
+        if action is None:
+            raise SonyConnectionError("Cannot read the Sony remote command list")
+        try:
+            if self.device.api_version >= 4:
+                response = self._request(
+                    action.url,
+                    HttpMethod.POST,
+                    json=self.device._create_api_json(action.value),
+                    headers={},
+                )
+                payload = response.json()
+                if error := payload.get("error"):
+                    if error[0] in (401, 403):
+                        raise SonyAuthenticationError(
+                            "Sony rejected the saved registration; pair again"
+                        )
+                    raise SonyConnectionError("Sony rejected the remote command list")
+                commands = [XmlApiObject(item) for item in payload["result"][1]]
+                for command in commands:
+                    if command.name == "PowerOff":
+                        command.name = "Power"
+            else:
+                response = self._request(action.url, HttpMethod.GET)
+                commands = [
+                    XmlApiObject(item.attrib)
+                    for item in ElementTree.fromstring(response.text).iter("command")
+                ]
+            if not commands or any(
+                not item.name or not item.value for item in commands
+            ):
+                raise SonyConnectionError("Cannot read the Sony remote command list")
+            self.device.commands = {item.name: item for item in commands}
+        except (
+            ValueError,
+            KeyError,
+            IndexError,
+            TypeError,
+            AttributeError,
+            ElementTree.ParseError,
+            SonyConnectionError,
+        ) as err:
+            raise SonyConnectionError(
+                "Cannot read the Sony remote command list"
+            ) from err
 
     def _power_status(self) -> bool:
         """Keep standby, authentication and connection failures distinct."""
@@ -167,8 +263,7 @@ class SonyClient:
     def refresh(self) -> SonyStatus:
         """Return fresh device state, authenticating on the first update."""
         if not self._authenticated:
-            if self.authenticate(self.pin) == AuthenticationResult.PIN_NEEDED:
-                raise SonyAuthenticationError("A new Sony PIN is required")
+            self.authenticate(resume=True)
         state = MediaPlayerState.OFF
         if self._power_status():
             state = MediaPlayerState.ON

@@ -13,6 +13,7 @@ import voluptuous as vol
 from .api import SonyAuthenticationError, SonyClient, SonyConnectionError
 from .const import (
     CONF_APP_PORT,
+    CONF_COOKIES,
     CONF_DMR_PORT,
     CONF_IRCC_PORT,
     CONF_MAC_ADDRESS,
@@ -71,6 +72,7 @@ class SonyConfigFlow(ConfigFlow, domain=DOMAIN):
             if result == AuthenticationResult.PIN_NEEDED:
                 return await self.async_step_pin()
             self._data[CONF_PIN] = self._client.pin
+            self._data[CONF_COOKIES] = self._client.cookies
             self._data[CONF_MAC_ADDRESS] = self._client.device.mac
             if self.source == SOURCE_REAUTH:
                 return self.async_update_reload_and_abort(
@@ -121,7 +123,7 @@ class SonyConfigFlow(ConfigFlow, domain=DOMAIN):
 
     async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
         """Start registration again when the device rejects saved credentials."""
-        self._data = {**entry_data, CONF_PIN: ""}
+        self._data = {**entry_data, CONF_PIN: "", CONF_COOKIES: []}
         self._client = SonyClient(self._data)
         return await self.async_step_reauth_confirm()
 

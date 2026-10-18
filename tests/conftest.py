@@ -61,6 +61,7 @@ def client():
     client.device.host = HOST
     client.device.mac = MAC
     client.pin = "0123"
+    client.cookies = []
     client.model = "BDV-E2100"
     client.authenticate.return_value = AuthenticationResult.SUCCESS
     client.refresh.return_value = SonyStatus(MediaPlayerState.PLAYING, COMMANDS)
