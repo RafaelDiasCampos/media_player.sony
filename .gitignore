@@ -1,0 +1,10 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+test_config/.storage/
+test_config/.HA_VERSION
+test_config/sony.conf

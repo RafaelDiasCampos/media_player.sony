@@ -1,38 +1,40 @@
 {
+  "title": "Sony Legacy API",
   "config": {
-    "abort": {
-      "already_configured": "Device is already configured"
-    },
-    "error": {
-      "cannot_connect": "Failed to connect",
-      "invalid_auth": "Invalid authentication",
-      "unknown": "Unexpected error"
-    },
     "step": {
       "user": {
+        "title": "Connect to your Sony device",
+        "description": "Turn on the Sony device and enable remote access. Use an IP address or hostname without a URL scheme. Leave the PIN empty to request a new PIN on the TV.",
         "data": {
           "host": "Host",
-          "pin": "PIN code",
-          "app_port" : "App port",
-          "dmr_port" : "DMR port",
-          "ircc_port" : "IRCC port"
+          "name": "Name",
+          "pin": "PIN (optional)",
+          "app_port": "App port",
+          "dmr_port": "DMR port",
+          "ircc_port": "IRCC port"
         }
       },
-      "zeroconf_confirm": {
+      "pin": {
+        "title": "Pair your Sony device",
+        "description": "Enter the PIN shown on the TV connected to the Sony device.",
         "data": {
-          "host": "Host"
-        },
-        "title": "Sony media"
-      }
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "data": {
-          "host": "Host"
+          "pin": "PIN"
         }
+      },
+      "reauth_confirm": {
+        "title": "Pair your Sony device again",
+        "description": "Turn on the Sony device and enable remote access. Continue to request a new PIN on the TV."
       }
+    },
+    "error": {
+      "cannot_connect": "Cannot connect. Check the address, ports, network and remote access settings.",
+      "invalid_auth": "The PIN was rejected. Enter the PIN shown on the TV.",
+      "invalid_host": "Enter an IP address or hostname without a scheme, port or path.",
+      "unknown": "Unexpected error. Check the Home Assistant logs."
+    },
+    "abort": {
+      "already_configured": "This device is already configured.",
+      "reauth_successful": "Authentication was successful."
     }
   }
 }

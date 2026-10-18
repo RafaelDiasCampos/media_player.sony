@@ -1,206 +1,135 @@
-"""Config flow for Unfolded Circle Remote integration."""
+"""Configure and reauthenticate a Sony Legacy API device."""
 
 import logging
 from typing import Any
 
+from homeassistant.config_entries import SOURCE_REAUTH, ConfigFlow, ConfigFlowResult
+from homeassistant.const import CONF_HOST, CONF_NAME
+from homeassistant.helpers import config_validation as cv
+import requests
+from sonyapilib.device import AuthenticationResult
 import voluptuous as vol
-from homeassistant import config_entries
-from homeassistant.config_entries import ConfigEntry, ConfigFlow, OptionsFlow
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
-from homeassistant.data_entry_flow import FlowResult
-from homeassistant.exceptions import HomeAssistantError
-from sonyapilib.device import SonyDevice, AuthenticationResult
 
-from .const import DOMAIN, CONF_APP_PORT, DEFAULT_APP_PORT, CONF_DMR_PORT, DEFAULT_DMR_PORT, \
-    CONF_IRCC_PORT, DEFAULT_IRCC_PORT, CONF_PIN, DEFAULT_DEVICE_NAME
+from .api import SonyAuthenticationError, SonyClient, SonyConnectionError
+from .const import (
+    CONF_APP_PORT,
+    CONF_DMR_PORT,
+    CONF_IRCC_PORT,
+    CONF_MAC_ADDRESS,
+    CONF_PIN,
+    DEFAULT_APP_PORT,
+    DEFAULT_DEVICE_NAME,
+    DEFAULT_DMR_PORT,
+    DEFAULT_IRCC_PORT,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
-STEP_USER_DATA_SCHEMA = vol.Schema({vol.Required(CONF_HOST): str,
-                                    vol.Optional(CONF_PIN, default="0000"): str,
-                                    vol.Optional(CONF_APP_PORT, default=DEFAULT_APP_PORT): int,
-                                    vol.Optional(CONF_DMR_PORT, default=DEFAULT_DMR_PORT): int,
-                                    vol.Optional(CONF_IRCC_PORT, default=DEFAULT_IRCC_PORT): int})
-
-STEP_PIN_DATA_SCHEMA = vol.Schema({vol.Required(CONF_PIN, default="0000"): str})
-
-
-# TODO Sony device supports SSDP discovery
-def validate_input(user_input: dict[str, Any]) -> dict[str, Any]:
-    """Validate the user input allows us to connect.
-    Data has the keys from STEP_USER_DATA_SCHEMA with values provided by the user.
-    """
-    errors = {}
-    pin = user_input.get('pin')
-    _LOGGER.debug("Sony device user input %s", user_input)
-    sony_device = SonyDevice(user_input[CONF_HOST], DEFAULT_DEVICE_NAME,
-                             psk=None, app_port=user_input[CONF_APP_PORT],
-                             dmr_port=user_input[CONF_DMR_PORT], ircc_port=user_input[CONF_IRCC_PORT])
-    authenticated = False
-    if pin == '0000' or pin is None or pin == '':
-        register_result = sony_device.register()
-        if register_result == AuthenticationResult.SUCCESS:
-            authenticated = True
-        elif register_result == AuthenticationResult.PIN_NEEDED:
-            # return so next call has the correct pin
-            config = {"error": AuthenticationResult.PIN_NEEDED}
-            config.update(user_input)
-            return config
-        else:
-            _LOGGER.error("An unknown error occured during registration")
-
-    if not authenticated:
-        authenticated = sony_device.send_authentication(pin)
-
-    # Return info that you want to store in the config entry.
-    config = {
-        "authenticated": authenticated,
-        "mac_address": sony_device.mac
-        # "device_info": sony_device.save_to_json()
+STEP_USER_DATA_SCHEMA = vol.Schema(
+    {
+        vol.Required(CONF_HOST): cv.string,
+        vol.Optional(CONF_NAME, default=DEFAULT_DEVICE_NAME): cv.string,
+        vol.Optional(CONF_PIN, default=""): cv.string,
+        vol.Optional(CONF_APP_PORT, default=DEFAULT_APP_PORT): cv.port,
+        vol.Optional(CONF_DMR_PORT, default=DEFAULT_DMR_PORT): cv.port,
+        vol.Optional(CONF_IRCC_PORT, default=DEFAULT_IRCC_PORT): cv.port,
     }
-    config.update(user_input)
-    return config
+)
+STEP_PIN_DATA_SCHEMA = vol.Schema({vol.Required(CONF_PIN): cv.string})
 
 
 class SonyConfigFlow(ConfigFlow, domain=DOMAIN):
-    """Handle a config flow for Unfolded Circle Remote."""
+    """Handle initial registration and expired Sony PINs."""
 
     VERSION = 1
     MINOR_VERSION = 1
-    CONNECTION_CLASS = config_entries.CONN_CLASS_LOCAL_POLL
-
-    reauth_entry: ConfigEntry | None = None
-    user_input: dict[str, Any] | None = None
 
     def __init__(self) -> None:
-        """Sony Config Flow."""
-        self.api: SonyDevice = None
-        self.discovery_info: dict[str, Any] = {}
+        """Keep one client across the registration and PIN steps."""
+        self._data: dict[str, Any] = {}
+        self._client: SonyClient | None = None
 
-    async def async_step_user(
-            self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Handle the initial step."""
+    async def _async_authenticate(
+        self, step_id: str, schema: vol.Schema
+    ) -> ConfigFlowResult:
+        """Authenticate in an executor and only save successful registrations."""
+        assert self._client is not None
         errors: dict[str, str] = {}
-        if user_input is None or user_input == {}:
-            return self.async_show_form(
-                step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
-            )
-
-        if self.user_input is None:
-            self.user_input = user_input
-        else:
-            self.user_input.update(user_input)
-
         try:
-            info = await self.hass.async_add_executor_job(validate_input, self.user_input)
-            if info.get("error") and info.get("error") == AuthenticationResult.PIN_NEEDED:
-                errors["base"] = "invalid_auth"
-                return self.async_show_form(
-                    step_id="user", data_schema=STEP_PIN_DATA_SCHEMA, errors=errors,
-                )
-        except CannotConnect:
-            errors["base"] = "cannot_connect"
-        except InvalidAuth:
+            result = await self.hass.async_add_executor_job(
+                self._client.authenticate, self._data.get(CONF_PIN)
+            )
+        except SonyAuthenticationError:
             errors["base"] = "invalid_auth"
-        except ValueError as ex:
-            _LOGGER.exception("Unexpected exception", ex)
+        except SonyConnectionError, requests.RequestException, ValueError:
             errors["base"] = "cannot_connect"
-        except Exception:  # pylint: disable=broad-except
-            _LOGGER.exception("Unexpected exception")
+        except Exception:  # Unexpected failures in the third-party protocol library.
+            _LOGGER.exception("Unexpected error connecting to the Sony device")
             errors["base"] = "unknown"
         else:
-            if len(errors.keys()) == 0:
-                await self.async_set_unique_id(self.user_input[CONF_HOST])
-                self._abort_if_unique_id_configured()
+            if result == AuthenticationResult.PIN_NEEDED:
+                return await self.async_step_pin()
+            self._data[CONF_PIN] = self._client.pin
+            self._data[CONF_MAC_ADDRESS] = self._client.device.mac
+            if self.source == SOURCE_REAUTH:
+                return self.async_update_reload_and_abort(
+                    self._get_reauth_entry(), data_updates=self._data
+                )
+            return self.async_create_entry(
+                title=self._data.get(CONF_NAME, DEFAULT_DEVICE_NAME), data=self._data
+            )
+        return self.async_show_form(step_id=step_id, data_schema=schema, errors=errors)
 
-                return self.async_create_entry(title=DEFAULT_DEVICE_NAME, data=info)
+    async def async_step_user(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask for the address and the device-specific ports."""
+        if user_input is None:
+            return self.async_show_form(
+                step_id="user", data_schema=STEP_USER_DATA_SCHEMA
+            )
+        self._data = dict(user_input)
+        self._data[CONF_HOST] = self._data[CONF_HOST].strip().lower()
+        if not self._data[CONF_HOST] or any(
+            char.isspace() or char in "/:?#@\\" for char in self._data[CONF_HOST]
+        ):
+            return self.async_show_form(
+                step_id="user",
+                data_schema=STEP_USER_DATA_SCHEMA,
+                errors={CONF_HOST: "invalid_host"},
+            )
+        await self.async_set_unique_id(self._data[CONF_HOST])
+        self._abort_if_unique_id_configured()
+        # Existing entries used the host verbatim as the unique ID.
+        if any(
+            entry.data[CONF_HOST].strip().lower() == self._data[CONF_HOST]
+            for entry in self._async_current_entries()
+        ):
+            return self.async_abort(reason="already_configured")
+        self._client = SonyClient(self._data)
+        return await self._async_authenticate("user", STEP_USER_DATA_SCHEMA)
 
-        return self.async_show_form(
-            step_id="user", data_schema=STEP_USER_DATA_SCHEMA, errors=errors
-        )
+    async def async_step_pin(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Accept the PIN displayed on the TV, preserving leading zeros."""
+        if user_input is None:
+            return self.async_show_form(step_id="pin", data_schema=STEP_PIN_DATA_SCHEMA)
+        self._data[CONF_PIN] = user_input[CONF_PIN]
+        return await self._async_authenticate("pin", STEP_PIN_DATA_SCHEMA)
 
-    # async def async_step_reauth(
-    #         self, user_input: dict[str, Any] | None = None
-    # ) -> FlowResult:
-    #     """Perform reauth upon an API authentication error."""
-    #     user_input["pin"] = None
-    #     user_input["apiKey"] = None
-    #     return await self.async_step_reauth_confirm(user_input)
-    #
-    # async def async_step_reauth_confirm(
-    #         self, user_input: dict[str, Any] | None = None
-    # ) -> FlowResult:
-    #     """Dialog that informs the user that reauth is required."""
-    #     errors = {}
-    #     if user_input is None:
-    #         user_input = {}
-    #
-    #     self.reauth_entry = self.hass.config_entries.async_get_entry(
-    #         self.context["entry_id"]
-    #     )
-    #
-    #     _LOGGER.debug("RC2 async_step_reauth_confirm %s", self.reauth_entry)
-    #
-    #     if user_input.get("pin") is None:
-    #         return self.async_show_form(
-    #             step_id="reauth_confirm", data_schema=STEP_ZEROCONF_DATA_SCHEMA
-    #         )
-    #
-    #     try:
-    #         existing_entry = await self.async_set_unique_id(self.reauth_entry.unique_id)
-    #         _LOGGER.debug("RC2 existing_entry %s", existing_entry)
-    #         info = await validate_input(user_input, self.reauth_entry.data[CONF_HOST])
-    #     except CannotConnect:
-    #         _LOGGER.exception("Cannot Connect")
-    #         errors["base"] = "Cannot Connect"
-    #     except InvalidAuth:
-    #         _LOGGER.exception("Invalid PIN")
-    #         errors["base"] = "Invalid PIN"
-    #     except Exception as ex:  # pylint: disable=broad-except
-    #         _LOGGER.exception(ex)
-    #         errors["base"] = "unknown"
-    #     else:
-    #         existing_entry = await self.async_set_unique_id(self.reauth_entry.unique_id)
-    #         if existing_entry:
-    #             self.hass.config_entries.async_update_entry(existing_entry, data=info)
-    #             await self.hass.config_entries.async_reload(existing_entry.entry_id)
-    #             return self.async_abort(reason="reauth_successful")
-    #
-    #         return self.async_create_entry(
-    #             title=info["title"],
-    #             data=info,
-    #         )
-    #     return self.async_show_form(
-    #         step_id="reauth_confirm",
-    #         data_schema=STEP_ZEROCONF_DATA_SCHEMA,
-    #         errors=errors,
-    #     )
+    async def async_step_reauth(self, entry_data: dict[str, Any]) -> ConfigFlowResult:
+        """Start registration again when the device rejects saved credentials."""
+        self._data = {**entry_data, CONF_PIN: ""}
+        self._client = SonyClient(self._data)
+        return await self.async_step_reauth_confirm()
 
-
-class SonyDeviceOptionsFlowHandler(OptionsFlow):
-    """Handle Unfolded Circle Remote options."""
-
-    def __init__(self, config_entry: ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
-
-    async def async_step_init(
-            self, user_input: dict[str, int] | None = None
-    ) -> FlowResult:
-        """Manage Unfolded Circle options."""
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-
-        return self.async_show_form(
-            step_id="init",
-            data_schema=STEP_USER_DATA_SCHEMA,
-        )
-
-
-class CannotConnect(HomeAssistantError):
-    """Error to indicate we cannot connect."""
-
-
-class InvalidAuth(HomeAssistantError):
-    """Error to indicate there is invalid auth."""
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Request a new PIN after the user turns on the Sony device."""
+        schema = vol.Schema({})
+        if user_input is None:
+            return self.async_show_form(step_id="reauth_confirm", data_schema=schema)
+        return await self._async_authenticate("reauth_confirm", schema)

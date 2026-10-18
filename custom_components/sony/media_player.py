@@ -1,291 +1,104 @@
-"""
-Support for interface with a Sony MediaPlayer TV.
+"""Control a Sony device as a media player."""
 
-For more details about this platform, please refer to the documentation at
-https://github.com/dilruacs/media_player.sony
-"""
-import logging
+from homeassistant.components.media_player import (
+    MediaPlayerEntity,
+    MediaPlayerEntityFeature,
+    MediaPlayerState,
+)
+from homeassistant.const import CONF_HOST
+from homeassistant.core import HomeAssistant
+from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
-from homeassistant.components.media_player import MediaPlayerEntity, ENTITY_ID_FORMAT
-from homeassistant.components.media_player.const import (
-    MediaPlayerEntityFeature)
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import STATE_OFF
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers.device_registry import DeviceInfo
-from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from .coordinator import SonyConfigEntry, SonyCoordinator
+from .entity import SonyEntity
 
-from . import SonyCoordinator
-from .const import DOMAIN, SONY_COORDINATOR
-
-_LOGGER = logging.getLogger(__name__)
-
-SUPPORT_SONY = (MediaPlayerEntityFeature.PAUSE|
-                MediaPlayerEntityFeature.VOLUME_MUTE|
-                MediaPlayerEntityFeature.PREVIOUS_TRACK|
-                MediaPlayerEntityFeature.NEXT_TRACK|
-                MediaPlayerEntityFeature.TURN_ON|
-                MediaPlayerEntityFeature.TURN_OFF|
-                MediaPlayerEntityFeature.PLAY_MEDIA|
-                MediaPlayerEntityFeature.VOLUME_STEP|
-                MediaPlayerEntityFeature.STOP|
-                MediaPlayerEntityFeature.PLAY)
 
 async def async_setup_entry(
-        hass: HomeAssistant,
-        config_entry: ConfigEntry,
-        async_add_entities: AddEntitiesCallback,
+    hass: HomeAssistant,
+    entry: SonyConfigEntry,
+    async_add_entities: AddConfigEntryEntitiesCallback,
 ) -> None:
-    """Use to setup entity."""
-    _LOGGER.debug("Sony async_add_entities media player")
-    coordinator = hass.data[DOMAIN][config_entry.entry_id][SONY_COORDINATOR]
-    async_add_entities(
-        [SonyMediaPlayerEntity(coordinator)]
-    )
-
-# pylint: disable=unused-argument
-# def setup_platform(hass, config, add_devices, discovery_info=None):
-#     """Set up the Sony Media Player platform."""
-#     host = config.get(CONF_HOST)
-#
-#     if host is None:
-#         return
-#
-#     pin = None
-#     logger = logging.getLogger('sonyapilib.device')
-#     logger.setLevel(logging.CRITICAL)
-#     sony_config = load_json(hass.config.path(SONY_CONFIG_FILE))
-#
-#     while sony_config:
-#         # Set up a configured TV
-#         host_ip, host_config = sony_config.popitem()
-#         if host_ip == host:
-#             device = SonyDevice.load_from_json(host_config)
-#             hass_device = SonyMediaPlayerEntity(device)
-#             add_devices([hass_device])
-#             return
-#
-#     setup_sonymediaplayer(config, pin, hass, add_devices)
+    """Set up the media player from a config entry."""
+    async_add_entities([SonyMediaPlayerEntity(entry.runtime_data)])
 
 
-# def setup_sonymediaplayer(config, sony_device, hass, add_devices):
-#     """Set up a Sony Media Player based on host parameter."""
-#     host = config.get(CONF_HOST)
-#     broadcast = config.get(CONF_BROADCAST_ADDRESS)
-#
-#     if sony_device is None:
-#         request_configuration(config, hass, add_devices)
-#     else:
-#         # If we came here and configuring this host, mark as done
-#         if host in _CONFIGURING:
-#             request_id = _CONFIGURING.pop(host)
-#             configurator = hass.components.configurator
-#             configurator.request_done(request_id)
-#             _LOGGER.info("Discovery configuration done")
-#
-#         if broadcast:
-#             sony_device.broadcast = broadcast
-#
-#         hass_device = SonyMediaPlayerEntity(sony_device)
-#         config[host] = hass_device.sonydevice.save_to_json()
-#
-#         # Save config, we need the mac address to support wake on LAN
-#         save_json(hass.config.path(SONY_CONFIG_FILE), config)
-#
-#         add_devices([hass_device])
+class SonyMediaPlayerEntity(SonyEntity, MediaPlayerEntity):
+    """Represent a Sony media player using the shared coordinator state."""
 
+    _attr_name = None
 
-# def request_configuration(config, hass, add_devices):
-#     """Request configuration steps from the user."""
-#     host = config.get(CONF_HOST)
-#     name = config.get(CONF_NAME)
-#     app_port = config.get(CONF_APP_PORT)
-#     dmr_port = config.get(CONF_DMR_PORT)
-#     ircc_port = config.get(CONF_IRCC_PORT)
-#     psk = None
-#
-#     configurator = hass.components.configurator
-#
-#     # We got an error if this method is called while we are configuring
-#     if host in _CONFIGURING:
-#         configurator.notify_errors(
-#             _CONFIGURING[host], "Failed to register, please try again.")
-#         return
-#
-#     def sony_configuration_callback(data):
-#         """Handle the entry of user PIN."""
-#         from sonyapilib.device import AuthenticationResult
-#
-#         pin = data.get('pin')
-#         sony_device = SonyDevice(host, name,
-#                                  psk=psk, app_port=app_port,
-#                                  dmr_port=dmr_port, ircc_port=ircc_port)
-#
-#         authenticated = False
-#
-#         # make sure we only send the authentication to the device
-#         # if we have a valid pin
-#         if pin == '0000' or pin is None or pin == '':
-#             register_result = sony_device.register()
-#             if register_result == AuthenticationResult.SUCCESS:
-#                 authenticated = True
-#             elif register_result == AuthenticationResult.PIN_NEEDED:
-#                 # return so next call has the correct pin
-#                 return
-#             else:
-#                 _LOGGER.error("An unknown error occured during registration")
-#
-#         authenticated = sony_device.send_authentication(pin)
-#         if authenticated:
-#             setup_sonymediaplayer(config, sony_device, hass, add_devices)
-#         else:
-#             request_configuration(config, hass, add_devices)
-#
-#     _CONFIGURING[host] = configurator.request_config(
-#         name, sony_configuration_callback,
-#         description='Enter the Pin shown on your Sony Device. '
-#         'If no Pin is shown, enter 0000 '
-#         'to let the device show you a Pin.',
-#         description_image="/static/images/smart-tv.png",
-#         submit_caption="Confirm",
-#         fields=[{'id': 'pin', 'name': 'Enter the pin', 'type': ''}]
-#     )
-
-
-class SonyMediaPlayerEntity(CoordinatorEntity[SonyCoordinator], MediaPlayerEntity):
-    # pylint: disable=too-many-instance-attributes
-    """Representation of a Sony mediaplayer."""
-
-    def __init__(self, coordinator):
-        """
-        Initialize the Sony mediaplayer device.
-
-        Mac address is optional but neccessary for wake on LAN
-        """
+    def __init__(self, coordinator: SonyCoordinator) -> None:
+        """Preserve the unique ID used by existing installations."""
         super().__init__(coordinator)
-        self.coordinator = coordinator
-        # self._name = f"{self.coordinator.api.name} Media Player"
-        # self._attr_name = f"{self.coordinator.api.name} Media Player"
-        self._state = STATE_OFF
-        self._muted = False
-        self._id = None
-        self._playing = False
-        self._unique_id = ENTITY_ID_FORMAT.format(
-            f"{self.coordinator.api.host}_media_player")
-        try:
-            self.update()
-        except Exception:  # pylint: disable=broad-except
-            self._state = STATE_OFF
+        host = coordinator.config_entry.data[CONF_HOST]
+        self._attr_unique_id = f"media_player.{host}_media_player"
 
     @property
-    def device_info(self) -> DeviceInfo:
-        """Return the device info."""
-        return DeviceInfo(
-            identifiers={
-                # Mac address is unique identifiers within a specific domain
-                (DOMAIN, self.coordinator.api.mac)
-            },
-            name=self.coordinator.api.nickname,
-            manufacturer="Sony",
-            model=self.coordinator.api.client_id
-        )
+    def state(self) -> MediaPlayerState:
+        """Read the current state directly, without a second cached state."""
+        return self.coordinator.data.state
 
     @property
-    def unique_id(self) -> str | None:
-        return self._unique_id
+    def supported_features(self) -> MediaPlayerEntityFeature:
+        """Only advertise controls which the device actually provides."""
+        commands = self.coordinator.data.commands
+        features = MediaPlayerEntityFeature(0)
+        for command, feature in (
+            ("Play", MediaPlayerEntityFeature.PLAY),
+            ("Pause", MediaPlayerEntityFeature.PAUSE),
+            ("Stop", MediaPlayerEntityFeature.STOP),
+            ("Next", MediaPlayerEntityFeature.NEXT_TRACK),
+            ("Prev", MediaPlayerEntityFeature.PREVIOUS_TRACK),
+        ):
+            if command in commands:
+                features |= feature
+        if "VolumeUp" in commands and "VolumeDown" in commands:
+            features |= MediaPlayerEntityFeature.VOLUME_STEP
+        if "Power" in commands:
+            features |= (
+                MediaPlayerEntityFeature.TURN_ON | MediaPlayerEntityFeature.TURN_OFF
+            )
+        elif self.coordinator.client.device.mac:
+            features |= MediaPlayerEntityFeature.TURN_ON
+        return features
 
-    def update(self):
-        """Update TV info."""
-        _LOGGER.debug("Sony media player update %s", self.coordinator.data)
-        self._state = self.coordinator.data.get("state", None)
-
-    @property
-    def name(self):
-        """Return the name of the device."""
-        return self.coordinator.api.nickname
-
-    @property
-    def state(self):
-        """Return the state of the device."""
-        return self._state
-
-    @property
-    def supported_features(self):
-        """Flag media player features that are supported."""
-        return SUPPORT_SONY
-
-    @property
-    def media_title(self):
-        """Title of current playing media."""
-        # the device used for testing does not send any
-        # information about the media which is played
-        return ""
-
-        @property
-        def media_content_id(self):
-            """Content ID of current playing media."""
-            return ""
-
-    @property
-    def media_duration(self):
-        """Duration of current playing media in seconds."""
-        return ""
-
-    def turn_on(self):
+    async def async_turn_on(self) -> None:
         """Turn the media player on."""
-        self.coordinator.api.power(True)
+        await self.coordinator.async_set_power(True)
 
-    def turn_off(self):
-        """Turn off media player."""
-        self.coordinator.api.power(False)
+    async def async_turn_off(self) -> None:
+        """Turn the media player off."""
+        await self.coordinator.async_set_power(False)
 
-    def media_play_pause(self):
-        """Simulate play pause media player."""
-        if self._playing:
-            self.media_pause()
-        else:
-            self.media_play()
+    async def _async_command(self, command: str) -> None:
+        """Send a command, then update the state shared by both entities."""
+        await self.coordinator.async_send_command(command)
+        await self.coordinator.async_request_refresh()
 
-    def media_play(self):
-        """Send play command."""
-        _LOGGER.debug(self.coordinator.api.commands)
-        self._playing = True
-        self.coordinator.api.play()
+    async def async_media_play(self) -> None:
+        """Start playback."""
+        await self._async_command("Play")
 
-    def media_pause(self):
-        """Send media pause command to media player."""
-        self._playing = False
-        self.coordinator.api.pause()
+    async def async_media_pause(self) -> None:
+        """Pause playback."""
+        await self._async_command("Pause")
 
-    def media_next_track(self):
-        """Send next track command."""
-        self.coordinator.api.next()
+    async def async_media_stop(self) -> None:
+        """Stop playback."""
+        await self._async_command("Stop")
 
-    def media_previous_track(self):
-        """Send the previous track command."""
-        self.coordinator.api.prev()
+    async def async_media_next_track(self) -> None:
+        """Skip to the next track."""
+        await self._async_command("Next")
 
-    def media_stop(self):
-        """Send stop command."""
-        self.coordinator.api.stop()
+    async def async_media_previous_track(self) -> None:
+        """Skip to the previous track."""
+        await self._async_command("Prev")
 
-    def volume_up(self):
-        """Send stop command."""
-        self.coordinator.api.volume_up()
+    async def async_volume_up(self) -> None:
+        """Increase volume by one step."""
+        await self.coordinator.async_send_command("VolumeUp")
 
-    def volume_down(self):
-        """Send stop command."""
-        self.coordinator.api.volume_down()
-
-    def mute_volume(self, mute):
-        """Send stop command."""
-        self.coordinator.api.mute()
-
-    @callback
-    def _handle_coordinator_update(self) -> None:
-        """Handle updated data from the coordinator."""
-        # Update only if activity changed
-        self.update()
-        self.async_write_ha_state()
-        return super()._handle_coordinator_update()
+    async def async_volume_down(self) -> None:
+        """Decrease volume by one step."""
+        await self.coordinator.async_send_command("VolumeDown")

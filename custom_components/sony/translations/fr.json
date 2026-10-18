@@ -1,34 +1,40 @@
 {
+  "title": "Sony Legacy API",
   "config": {
-    "abort": {
-      "already_configured": "L'appareil est déjà configuré"
-    },
-    "error": {
-      "cannot_connect": "Echec de la connexion",
-      "invalid_auth": "Authentification incorrecte",
-      "unknown": "Erreur inconnue"
-    },
     "step": {
       "user": {
+        "title": "Connexion à votre appareil Sony",
+        "description": "Allumez l’appareil et autorisez le contrôle à distance. Saisissez son adresse IP ou son nom d’hôte, sans préfixe http://. Laissez le code PIN vide pour en demander un nouveau sur le téléviseur.",
         "data": {
-          "host": "Hôte"
+          "host": "Hôte",
+          "name": "Nom",
+          "pin": "Code PIN (facultatif)",
+          "app_port": "Port App",
+          "dmr_port": "Port DMR",
+          "ircc_port": "Port IRCC"
         }
       },
-      "zeroconf_confirm": {
+      "pin": {
+        "title": "Associer votre appareil Sony",
+        "description": "Saisissez le code PIN affiché sur le téléviseur connecté à l’appareil Sony.",
         "data": {
-          "host": "Hôte"
-        },
-        "title": "Sony media"
-      }
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "data": {
-          "host": "Hôte"
+          "pin": "Code PIN"
         }
+      },
+      "reauth_confirm": {
+        "title": "Réassocier votre appareil Sony",
+        "description": "Allumez l’appareil Sony et autorisez le contrôle à distance. Continuez pour afficher un nouveau code PIN sur le téléviseur."
       }
+    },
+    "error": {
+      "cannot_connect": "Connexion impossible. Vérifiez l’adresse, les ports, le réseau et les paramètres de contrôle à distance.",
+      "invalid_auth": "Code PIN refusé. Saisissez le code affiché sur le téléviseur.",
+      "invalid_host": "Saisissez une adresse IP ou un nom d’hôte, sans préfixe, port ni chemin.",
+      "unknown": "Erreur inattendue. Consultez les journaux de Home Assistant."
+    },
+    "abort": {
+      "already_configured": "Cet appareil est déjà configuré.",
+      "reauth_successful": "Authentification réussie."
     }
   }
 }

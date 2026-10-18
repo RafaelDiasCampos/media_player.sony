@@ -1,0 +1,4 @@
+# This test plugin pins Home Assistant to 2026.10.2.
+pytest-homeassistant-custom-component==0.13.373
+sonyapilib==0.5.0
+ruff==0.17.1

@@ -1,0 +1,40 @@
+{
+  "title": "Sony Legacy API",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Conectar ao dispositivo Sony",
+        "description": "Ligue o dispositivo Sony e habilite o controle remoto pela rede. Informe o IP ou nome do host, sem http://. Deixe o PIN vazio para solicitar um novo código na TV.",
+        "data": {
+          "host": "Host",
+          "name": "Nome",
+          "pin": "PIN (opcional)",
+          "app_port": "Porta App",
+          "dmr_port": "Porta DMR",
+          "ircc_port": "Porta IRCC"
+        }
+      },
+      "pin": {
+        "title": "Parear o dispositivo Sony",
+        "description": "Digite o PIN exibido na TV conectada ao dispositivo Sony.",
+        "data": {
+          "pin": "PIN"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Parear novamente o dispositivo Sony",
+        "description": "Ligue o dispositivo Sony e habilite o controle remoto pela rede. Continue para solicitar um novo PIN na TV."
+      }
+    },
+    "error": {
+      "cannot_connect": "Não foi possível conectar. Verifique o endereço, as portas, a rede e as configurações de controle remoto.",
+      "invalid_auth": "PIN recusado. Digite o código exibido na TV.",
+      "invalid_host": "Informe um IP ou nome de host, sem protocolo, porta ou caminho.",
+      "unknown": "Erro inesperado. Consulte os registros do Home Assistant."
+    },
+    "abort": {
+      "already_configured": "Este dispositivo já está configurado.",
+      "reauth_successful": "Autenticação realizada com sucesso."
+    }
+  }
+}
