@@ -1,11 +1,68 @@
 # Sony Legacy API
 
+This is a maintained fork of
+[dilruacs/media_player.sony](https://github.com/dilruacs/media_player.sony),
+the original repository this fork was created from. It updates the legacy Sony
+integration for newer Home Assistant releases, including installations running
+**Home Assistant OS (HAOS)**, and adds HACS installation support.
+
 Control Sony devices that expose the legacy CERS/IRCC network API from Home
 Assistant. The integration creates a media player and a remote for each device.
 
-Requires **Home Assistant 2026.10.0 or newer**. Automated tests run against Home
-Assistant **2026.10.2 on Python 3.14**, using simulated Sony HTTP responses.
-Physical-device testing is still required for individual models and firmware.
+Requires **Home Assistant Core 2026.10.0 or newer**. On Home Assistant OS, this
+means the Home Assistant application version; the operating system has its own
+version numbering. Automated tests run against **Home Assistant 2026.10.2 on
+Python 3.14**.
+
+**Tested on physical hardware: Sony BDV-E2100.** See the testing details below.
+
+## Tested devices
+
+| Device | Testing confirmed |
+| --- | --- |
+| **Sony BDV-E2100** | User-confirmed successful PIN pairing and integration setup, working media-player and remote entities, and discovery of **70 advertised remote commands** with version 2.1.1. |
+
+The [BDV-E2100 dashboard example](examples/sony-bdv-e2100-remote.yaml) includes
+all 70 commands reported by that device. Each individual button has not been
+independently verified; some advertised keys apply only to particular inputs,
+regions or related Sony models. Other models and firmware still need testing.
+
+Automated tests use simulated Sony HTTP responses separately from this physical
+device report. They cover registration, single-use PINs, setup, reload,
+reauthentication, entity behavior and command delivery.
+
+## How the integration works
+
+1. **Discover the device's services.** Home Assistant reads the Sony's UPnP
+   descriptions using the configured ports. It follows the advertised CERS/IRCC
+   endpoints to read the remote command list and system information. Where
+   supported, it also discovers AVTransport playback status and a MAC address
+   for Wake-on-LAN.
+2. **Pair once.** Devices requiring registration display a PIN on the connected
+   TV. Successful pairing saves the registration cookies, where provided, in the
+   Home Assistant config entry. Later setup and reload verify access using that
+   saved registration and a stable client identity. They do not start another
+   registration with an already-consumed PIN. If Sony revokes access, Home
+   Assistant asks you to authenticate the existing entry again.
+3. **Create two entities.** The `media_player` entity provides the standard
+   playback, volume-step and power controls supported by the advertised keys.
+   The `remote` entity sends every advertised command through
+   `remote.send_command`. Home Assistant's default remote widget shows a power
+   toggle; use actions or the dashboard example for the additional buttons.
+4. **Keep state updated.** Both entities share one poll every 60 seconds.
+   Remote command sequences and media-player playback/power actions also request
+   a refresh. AVTransport supplies playback state where available. Legacy devices
+   may expose only reachability rather than a reliable standby state.
+5. **Control over the local network.** IRCC commands are sent directly to the
+   Sony device as HTTP/SOAP requests. Commands and polling are serialized, and
+   network operations run outside Home Assistant's event loop. Connection errors
+   make the entities unavailable; rejected credentials trigger reauthentication.
+
+Remote commands are **button presses**. For example, `BDV:Function` cycles inputs
+and `BDV:SoundModeUp` steps through sound modes. These keys do not provide a
+named-input selector, absolute volume setting or feedback about the selected
+sound mode. Available keys come from the device rather than a fixed list shared
+by every Sony model.
 
 ## Install with HACS
 
@@ -66,8 +123,8 @@ The following override was documented by this project before this update:
 | --- | --- | --- | --- |
 | BDP-S590 | 52323 | 50202 | 52323 |
 
-BDV home-theater models, including the BDV-E2100, need their own service ports
-verified on the device. This update does not claim hardware validation for them.
+The BDV-E2100 has been tested with this fork. Its service ports still need to
+match those advertised by the individual device; firmware and models can differ.
 
 Existing version 2.0.0 config entries and entity unique IDs are retained. You do
 not need YAML configuration or a `sony.conf` file. If the device revokes its saved
@@ -85,7 +142,8 @@ It does not advertise URL playback or absolute volume/mute controls that the
 legacy library cannot implement reliably. To toggle mute, send `Mute` through
 the remote when it appears in that remote's `commands` attribute.
 
-Both entities share one poll every 60 seconds. Commands request a state refresh.
+Both entities share one poll every 60 seconds. Remote command sequences and
+media-player playback/power actions request a state refresh.
 Playback state comes from AVTransport when available; otherwise the media player
 shows `on`. The remote reports `on` for playing, paused and idle devices.
 Communication failures show `unavailable`. Scalar API devices with a confirmed
@@ -132,6 +190,47 @@ Common commands include `Power`, `Play`, `Pause`, `Stop`, `Next`, `Prev`, `Up`,
 Availability depends on the device. Hold/release semantics (`hold_secs`) and
 remote activities are not supported.
 
+The remote's `supported_features: 0` describes optional learning, deletion and
+activity features. It does not prevent `remote.send_command` from sending the
+commands listed in the entity's `commands` attribute.
+
+### BDV-E2100 dashboard remote
+
+Use [examples/sony-bdv-e2100-remote.yaml](examples/sony-bdv-e2100-remote.yaml)
+to add a dashboard remote with all **70 commands** advertised by the tested
+BDV-E2100. It uses built-in Home Assistant cards and needs no extra frontend
+plugins.
+
+1. Open the example file and copy its complete YAML contents.
+2. Find your Sony remote's entity ID under **Developer tools > States**.
+3. Replace every `remote.sony_device_remote` in the example if your entity ID
+   differs.
+4. Open your dashboard, select **Edit > Add card > Manual**, paste the YAML and
+   save the card.
+
+This is a **dashboard card**, so paste it into the card editor. The integration
+itself is configured through **Devices & services**; the example does not belong
+in `configuration.yaml`.
+
+The dashboard groups power, volume, input switching, navigation, playback,
+sound settings, color and number keys, browser/app keys and model-specific extras.
+Some useful commands are:
+
+| Control | Command |
+| --- | --- |
+| Cycle inputs | `BDV:Function` |
+| Select Bluetooth | `BDV:Bluetooth` |
+| Change sound mode | `BDV:SoundMode`, `BDV:SoundModeUp`, `BDV:SoundModeDown` |
+| Music equalizer | `BDV:MusicEQ` |
+| Football mode | `BDV:FootBall` |
+| Sound output | `BDV:SoundOutput` |
+| Toggle mute | `Mute` |
+| Select audio track or subtitles | `Audio`, `SubTitle` |
+
+Hold and double-tap actions are disabled in the example. Hold/release semantics
+are not implemented by this integration. Legacy app buttons such as `Netflix`
+and `SEN` may appear even when their network services are no longer available.
+
 ## Troubleshooting
 
 - **HACS rejects the version:** confirm the download contains the updated
@@ -143,6 +242,12 @@ remote activities are not supported.
   with an empty PIN. Follow the on-screen prompt on the connected TV.
 - **Unsupported command:** use the exact name in the remote's `commands`
   attribute. The integration validates the entire sequence before sending it.
+- **Only a few controls appear:** the standard entity widgets show basic
+  controls. Use `remote.send_command` or the dashboard example to access the full
+  advertised command list.
+- **A listed button has no effect:** check the current input and the device's
+  capabilities. The advertised list may contain keys for other operating modes
+  or related models, and retired app services cannot be restored by sending a key.
 
 To remove the integration, delete its entry in **Settings > Devices & services**,
 then remove its download in HACS and restart Home Assistant.

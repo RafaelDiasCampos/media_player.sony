@@ -1,0 +1,1121 @@
+# Sony BDV-E2100 remote — Home Assistant dashboard card
+# Dashboard > Edit > Add card > Manual. Paste this complete file.
+# Replace EVERY remote.sony_device_remote with your actual remote entity ID.
+# Uses only built-in Home Assistant cards; no additional frontend installation.
+# All 70 commands advertised by the tested BDV-E2100 are included once.
+# Buttons send individual key presses, not a named-input or absolute-volume setting.
+# The integration does not implement press-and-hold; hold/double-tap are disabled.
+# Reference: https://www.home-assistant.io/dashboards/button/
+# Reference: https://www.home-assistant.io/dashboards/actions/
+
+type: vertical-stack
+cards:
+- type: entity
+  entity: remote.sony_device_remote
+  name: Sony BDV-E2100
+  icon: 'mdi:remote-tv'
+- type: grid
+  title: Power, volume and input
+  columns: 3
+  square: false
+  cards:
+  - type: button
+    name: Power toggle
+    icon: 'mdi:power'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Power
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Mute toggle
+    icon: 'mdi:volume-mute'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Mute
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Next input
+    icon: 'mdi:import'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: 'BDV:Function'
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Volume −
+    icon: 'mdi:volume-minus'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: VolumeDown
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Bluetooth
+    icon: 'mdi:bluetooth'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: 'BDV:Bluetooth'
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Volume +
+    icon: 'mdi:volume-plus'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: VolumeUp
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+- type: grid
+  title: Navigation
+  columns: 3
+  square: false
+  cards:
+  - type: button
+    name: Options
+    icon: 'mdi:dots-horizontal'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Options
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Up
+    icon: 'mdi:chevron-up'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Up
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Home
+    icon: 'mdi:home'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Home
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Left
+    icon: 'mdi:chevron-left'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Left
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: OK
+    icon: 'mdi:check-circle-outline'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Confirm
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Right
+    icon: 'mdi:chevron-right'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Right
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Back
+    icon: 'mdi:keyboard-return'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Return
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Down
+    icon: 'mdi:chevron-down'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Down
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Disc top menu
+    icon: 'mdi:disc'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: TopMenu
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+- type: grid
+  title: Playback and disc
+  columns: 3
+  square: false
+  cards:
+  - type: button
+    name: Previous
+    icon: 'mdi:skip-previous'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Prev
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Play
+    icon: 'mdi:play'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Play
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Next
+    icon: 'mdi:skip-next'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Next
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Rewind
+    icon: 'mdi:rewind'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Rewind
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Pause
+    icon: 'mdi:pause'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Pause
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Fast forward
+    icon: 'mdi:fast-forward'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Forward
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Stop
+    icon: 'mdi:stop'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Stop
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Eject
+    icon: 'mdi:eject'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Eject
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Disc pop-up
+    icon: 'mdi:menu'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: PopUpMenu
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Replay
+    icon: 'mdi:replay'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Replay
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Advance
+    icon: 'mdi:skip-forward'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Advance
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Display
+    icon: 'mdi:information-outline'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Display
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+- type: markdown
+  content: '**Input and sound controls**
+
+
+    Next input sends one FUNCTION press; press again to cycle sources. Sound mode and EQ keys also act as remote button presses, without reporting the selected mode back to Home Assistant.'
+- type: grid
+  title: Sound and audio
+  columns: 3
+  square: false
+  cards:
+  - type: button
+    name: Sound mode −
+    icon: 'mdi:minus'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: 'BDV:SoundModeDown'
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Sound mode
+    icon: 'mdi:surround-sound'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: 'BDV:SoundMode'
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Sound mode +
+    icon: 'mdi:plus'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: 'BDV:SoundModeUp'
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Music EQ
+    icon: 'mdi:equalizer'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: 'BDV:MusicEQ'
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Football mode
+    icon: 'mdi:soccer'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: 'BDV:FootBall'
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Sound output
+    icon: 'mdi:speaker-multiple'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: 'BDV:SoundOutput'
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Audio track
+    icon: 'mdi:music-note'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Audio
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Subtitles
+    icon: 'mdi:subtitles'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: SubTitle
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: 3D mode
+    icon: 'mdi:video-3d'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Mode3D
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+- type: grid
+  title: Color keys
+  columns: 4
+  square: false
+  cards:
+  - type: button
+    name: Red
+    icon: 'mdi:circle'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Red
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Green
+    icon: 'mdi:circle'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Green
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Yellow
+    icon: 'mdi:circle'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Yellow
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Blue
+    icon: 'mdi:circle'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Blue
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+- type: grid
+  title: Number keys
+  columns: 3
+  square: false
+  cards:
+  - type: button
+    name: '1'
+    icon: 'mdi:dialpad'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Num1
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: '2'
+    icon: 'mdi:dialpad'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Num2
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: '3'
+    icon: 'mdi:dialpad'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Num3
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: '4'
+    icon: 'mdi:dialpad'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Num4
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: '5'
+    icon: 'mdi:dialpad'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Num5
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: '6'
+    icon: 'mdi:dialpad'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Num6
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: '7'
+    icon: 'mdi:dialpad'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Num7
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: '8'
+    icon: 'mdi:dialpad'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Num8
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: '9'
+    icon: 'mdi:dialpad'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Num9
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Angle
+    icon: 'mdi:camera-switch'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Angle
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: '0'
+    icon: 'mdi:dialpad'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Num0
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Enter
+    icon: 'mdi:check'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Enter
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+- type: grid
+  title: Other controls
+  columns: 3
+  square: false
+  cards:
+  - type: button
+    name: Sleep timer
+    icon: 'mdi:sleep'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: 'BDV:Sleep'
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Dimmer
+    icon: 'mdi:brightness-6'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Dimmer
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Zoom in
+    icon: 'mdi:magnify-plus-outline'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: ZoomIn
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Zoom out
+    icon: 'mdi:magnify-minus-outline'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: ZoomOut
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Party on
+    icon: 'mdi:speaker-multiple'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: PartyOn
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Party off
+    icon: 'mdi:speaker-off'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: PartyOff
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+- type: markdown
+  content: '**Additional advertised commands**
+
+
+    App services may have been retired. Karaoke, party and lighting keys may only affect certain models, regions or operating modes.'
+- type: grid
+  title: Browser and legacy apps
+  columns: 3
+  square: false
+  cards:
+  - type: button
+    name: Favorites
+    icon: 'mdi:star'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Favorites
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Browser back
+    icon: 'mdi:arrow-left'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: BrowserBack
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Browser forward
+    icon: 'mdi:arrow-right'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: BrowserForward
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Bookmarks
+    icon: 'mdi:bookmark-outline'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: BrowserBookmarkList
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Sony network menu
+    icon: 'mdi:web'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: SEN
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Netflix
+    icon: 'mdi:netflix'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: Netflix
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+- type: grid
+  title: Model-dependent extra keys
+  columns: 3
+  square: false
+  cards:
+  - type: button
+    name: Mic echo
+    icon: 'mdi:microphone'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: 'BDV:Echo'
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Karaoke key −
+    icon: 'mdi:music-note-minus'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: 'BDV:KeyControl-'
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Karaoke key +
+    icon: 'mdi:music-note-plus'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: 'BDV:KeyControl+'
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Mic volume −
+    icon: 'mdi:microphone-minus'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: 'BDV:MicVol-'
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Mic volume +
+    icon: 'mdi:microphone-plus'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: 'BDV:MicVol+'
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Speaker lighting
+    icon: 'mdi:lightbulb-outline'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.send_command
+      target:
+        entity_id: remote.sony_device_remote
+      data:
+        command: 'BDV:SpeakerIllumination'
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
