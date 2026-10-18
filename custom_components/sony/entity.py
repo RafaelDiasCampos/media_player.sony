@@ -6,12 +6,20 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import CONF_ENTITY_ID_HOST, DEFAULT_DEVICE_NAME, DOMAIN
 from .coordinator import SonyCoordinator
+from .discovery import normalize_mac
 
 
 class SonyEntity(CoordinatorEntity[SonyCoordinator]):
     """An entity belonging to a Sony device."""
 
     _attr_has_entity_name = True
+
+    @property
+    def available(self) -> bool:
+        """A known MAC keeps Wake-on-LAN available when HTTP is unreachable."""
+        return self.coordinator.last_update_success or bool(
+            normalize_mac(self.coordinator.client.device.mac)
+        )
 
     def __init__(self, coordinator: SonyCoordinator) -> None:
         """Keep media player and remote on the same device registry entry."""

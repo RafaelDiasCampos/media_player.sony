@@ -6,7 +6,10 @@ changing it would invalidate existing registrations.
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+import logging
+import math
 from typing import Any
+from urllib.parse import urljoin
 from xml.etree import ElementTree
 from xml.sax.saxutils import escape
 
@@ -32,6 +35,11 @@ from .const import (
 )
 from .discovery import identity_matches, normalize_mac, normalize_udn
 
+_LOGGER = logging.getLogger(__name__)
+_UPNP_DEVICE = "{urn:schemas-upnp-org:device-1-0}"
+_UPNP_SERVICE = "{urn:schemas-upnp-org:service-1-0}"
+_SOAP = "{http://schemas.xmlsoap.org/soap/envelope/}"
+
 
 class SonyConnectionError(Exception):
     """The device could not be reached or returned an invalid response."""
@@ -51,6 +59,30 @@ class SonyStatus:
 
     state: MediaPlayerState
     commands: tuple[str, ...]
+    volume_level: float | None = None
+    is_volume_muted: bool | None = None
+    can_set_volume: bool = False
+    can_set_mute: bool = False
+
+
+@dataclass(frozen=True)
+class _RenderingControl:
+    """Audio capabilities read from the advertised UPnP service description."""
+
+    service_type: str
+    control_url: str
+    actions: frozenset[str]
+    volume_min: int = 0
+    volume_max: int = 0
+    volume_step: int = 1
+
+    @property
+    def has_volume_range(self) -> bool:
+        """Only normalize volume when the device supplies a usable range."""
+        return (
+            0 <= self.volume_min < self.volume_max <= 65535
+            and 1 <= self.volume_step <= self.volume_max - self.volume_min
+        )
 
 
 class _SonyDevice(SonyDevice):
@@ -92,6 +124,7 @@ class SonyClient:
         self._expected_udn = normalize_udn(data.get(CONF_UDN))
         self._discovered = False
         self._authenticated = False
+        self._rendering_control: _RenderingControl | None = None
 
     @property
     def cookies(self) -> list[dict[str, Any]]:
@@ -171,12 +204,169 @@ class SonyClient:
                 raise SonyDeviceMismatch(
                     "The address belongs to a different Sony device"
                 )
+            self._discover_rendering_control(description)
             self._discovered = True
         finally:
             if saved_cookies:
                 self.device.cookies.update(saved_cookies)
             if not self.device.mac:
                 self.device.mac = saved_mac
+
+    def _discover_rendering_control(self, description: ElementTree.Element) -> None:
+        """Read optional audio capabilities without making IRCC depend on them."""
+        for service in description.iter(f"{_UPNP_DEVICE}service"):
+            service_type = service.findtext(f"{_UPNP_DEVICE}serviceType", "")
+            if not service_type.startswith(
+                "urn:schemas-upnp-org:service:RenderingControl:"
+            ):
+                continue
+            control_url = service.findtext(f"{_UPNP_DEVICE}controlURL")
+            scpd_url = service.findtext(f"{_UPNP_DEVICE}SCPDURL")
+            if not control_url or not scpd_url:
+                continue
+            base_url = (
+                description.findtext(f"{_UPNP_DEVICE}URLBase") or self.device.dmr_url
+            )
+            try:
+                response = self._request(urljoin(base_url, scpd_url), HttpMethod.GET)
+                scpd = ElementTree.fromstring(response.text)
+                actions = frozenset(
+                    item.text
+                    for item in scpd.findall(
+                        f"{_UPNP_SERVICE}actionList/{_UPNP_SERVICE}action/"
+                        f"{_UPNP_SERVICE}name"
+                    )
+                    if item.text
+                )
+                minimum = maximum = 0
+                step = 1
+                for variable in scpd.findall(
+                    f"{_UPNP_SERVICE}serviceStateTable/{_UPNP_SERVICE}stateVariable"
+                ):
+                    if variable.findtext(f"{_UPNP_SERVICE}name") != "Volume":
+                        continue
+                    volume_range = variable.find(f"{_UPNP_SERVICE}allowedValueRange")
+                    if volume_range is not None:
+                        try:
+                            minimum = int(
+                                volume_range.findtext(f"{_UPNP_SERVICE}minimum", "")
+                            )
+                            maximum = int(
+                                volume_range.findtext(f"{_UPNP_SERVICE}maximum", "")
+                            )
+                            step = int(
+                                volume_range.findtext(f"{_UPNP_SERVICE}step", "1")
+                            )
+                        except ValueError:
+                            minimum = maximum = 0
+                    break
+                self._rendering_control = _RenderingControl(
+                    service_type,
+                    urljoin(base_url, control_url),
+                    actions,
+                    minimum,
+                    maximum,
+                    step,
+                )
+            except (
+                SonyConnectionError,
+                SonyAuthenticationError,
+                ElementTree.ParseError,
+            ) as err:
+                _LOGGER.debug("Optional Sony audio description unavailable: %s", err)
+            return
+
+    def _rendering_request(
+        self, action: str, arguments: Mapping[str, str] | None = None
+    ) -> ElementTree.Element:
+        """Call an advertised action with the SOAP encoding required by Sony."""
+        service = self._rendering_control
+        if service is None or action not in service.actions:
+            raise ValueError(f"Unsupported Sony audio action: {action}")
+        parameters = {"InstanceID": "0", "Channel": "Master", **(arguments or {})}
+        body = "".join(
+            f"<{name}>{escape(value)}</{name}>" for name, value in parameters.items()
+        )
+        try:
+            response = self._request(
+                service.control_url,
+                HttpMethod.POST,
+                headers={
+                    **self.device.headers,
+                    "Content-Type": 'text/xml; charset="utf-8"',
+                    "SOAPACTION": f'"{service.service_type}#{action}"',
+                },
+                data=(
+                    '<?xml version="1.0" encoding="utf-8"?>'
+                    '<s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" '
+                    's:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">'
+                    f'<s:Body><u:{action} xmlns:u="{service.service_type}">'
+                    f"{body}</u:{action}></s:Body></s:Envelope>"
+                ),
+            )
+        except SonyAuthenticationError as err:
+            # DLNA access control is separate from CERS PIN registration.
+            raise SonyConnectionError(
+                "Sony denied access to the audio service"
+            ) from err
+        try:
+            root = ElementTree.fromstring(response.text)
+        except ElementTree.ParseError as err:
+            raise SonyConnectionError("Sony returned invalid audio XML") from err
+        result = root.find(f"{_SOAP}Body/{{{service.service_type}}}{action}Response")
+        if result is None:
+            raise SonyConnectionError(f"Sony audio action {action} failed")
+        return result
+
+    def _audio_status(self) -> tuple[float | None, bool | None]:
+        """Treat optional audio failures independently from connection status."""
+        service = self._rendering_control
+        volume = None
+        muted = None
+        if service is None:
+            return volume, muted
+        if "GetVolume" in service.actions and service.has_volume_range:
+            try:
+                result = self._rendering_request("GetVolume")
+                raw = int(result.findtext("{*}CurrentVolume", ""))
+                if not service.volume_min <= raw <= service.volume_max:
+                    raise ValueError("Volume outside the advertised range")
+                volume = (raw - service.volume_min) / (
+                    service.volume_max - service.volume_min
+                )
+            except (SonyConnectionError, SonyAuthenticationError, ValueError) as err:
+                _LOGGER.debug("Optional Sony volume status unavailable: %s", err)
+        if "GetMute" in service.actions:
+            try:
+                result = self._rendering_request("GetMute")
+                raw_mute = result.findtext("{*}CurrentMute", "").strip().lower()
+                if raw_mute not in ("0", "1", "true", "false"):
+                    raise ValueError("Invalid mute state")
+                muted = raw_mute in ("1", "true")
+            except (SonyConnectionError, SonyAuthenticationError, ValueError) as err:
+                _LOGGER.debug("Optional Sony mute status unavailable: %s", err)
+        return volume, muted
+
+    def set_volume_level(self, volume: float) -> None:
+        """Set absolute volume using the device's advertised scale and step."""
+        service = self._rendering_control
+        if service is None or not service.has_volume_range:
+            raise ValueError("Sony did not advertise a usable volume range")
+        if not math.isfinite(volume) or not 0 <= volume <= 1:
+            raise ValueError("Volume must be between 0 and 1")
+        span = service.volume_max - service.volume_min
+        steps = min(
+            math.floor(volume * span / service.volume_step + 0.5),
+            span // service.volume_step,
+        )
+        self._rendering_request(
+            "SetVolume",
+            {"DesiredVolume": str(service.volume_min + steps * service.volume_step)},
+        )
+
+    def mute_volume(self, mute: bool) -> None:
+        """Set mute explicitly; never emulate a setter with a toggle command."""
+        self._rendering_request("SetMute", {"DesiredMute": "1" if mute else "0"})
 
     def authenticate(
         self, pin: str | None = None, *, resume: bool = False
@@ -307,6 +497,8 @@ class SonyClient:
         if not self._authenticated:
             self.authenticate(resume=True)
         state = MediaPlayerState.OFF
+        volume = None
+        muted = None
         if self._power_status():
             state = MediaPlayerState.ON
             # AVTransport is optional, for example while using an HDMI input.
@@ -320,7 +512,20 @@ class SonyClient:
                     "PAUSED_PLAYBACK": MediaPlayerState.PAUSED,
                     "STOPPED": MediaPlayerState.IDLE,
                 }.get(playback, MediaPlayerState.ON)
-        return SonyStatus(state, tuple(sorted(self.device.commands)))
+            volume, muted = self._audio_status()
+        service = self._rendering_control
+        return SonyStatus(
+            state=state,
+            commands=tuple(sorted(self.device.commands)),
+            volume_level=volume,
+            is_volume_muted=muted,
+            can_set_volume=volume is not None
+            and service is not None
+            and "SetVolume" in service.actions,
+            can_set_mute=muted is not None
+            and service is not None
+            and "SetMute" in service.actions,
+        )
 
     def send_command(self, command: str) -> None:
         """Send an advertised IRCC command and propagate HTTP failures."""
@@ -346,18 +551,16 @@ class SonyClient:
         )
 
     def set_power(self, power_on: bool) -> None:
-        """Avoid toggling a device which is already in the requested state."""
-        if power_on and self.device.mac:
-            self.device.wakeonlan()
-        try:
-            is_on = self._power_status()
-        except SonyConnectionError:
-            if power_on and self.device.mac:
-                # Wake-on-LAN was sent; polling will detect the device booting.
-                return
-            raise
+        """Wake by MAC without a network probe or a racing power toggle."""
+        if power_on and normalize_mac(self.device.mac):
+            try:
+                self.device.wakeonlan()
+            except OSError as err:
+                raise SonyConnectionError("Cannot send Sony wake packet") from err
+            return
+        is_on = self._power_status()
         if power_on != is_on:
             if "Power" in self.device.commands:
                 self.send_command("Power")
-            elif not power_on or not self.device.mac:
+            elif not power_on or not normalize_mac(self.device.mac):
                 raise ValueError("The device does not advertise a power command")

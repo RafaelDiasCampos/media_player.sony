@@ -11,6 +11,7 @@ from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
 from .const import CONF_ENTITY_ID_HOST
 from .coordinator import SonyConfigEntry, SonyCoordinator
+from .discovery import normalize_mac
 from .entity import SonyEntity
 
 
@@ -37,13 +38,35 @@ class SonyMediaPlayerEntity(SonyEntity, MediaPlayerEntity):
         self._attr_unique_id = f"media_player.{host}_media_player"
 
     @property
-    def state(self) -> MediaPlayerState:
+    def state(self) -> MediaPlayerState | None:
         """Read the current state directly, without a second cached state."""
+        if not self.coordinator.last_update_success:
+            return None
         return self.coordinator.data.state
+
+    @property
+    def volume_level(self) -> float | None:
+        """Return normalized volume only when it was actually read from Sony."""
+        if not self.coordinator.last_update_success:
+            return None
+        return self.coordinator.data.volume_level
+
+    @property
+    def is_volume_muted(self) -> bool | None:
+        """Return the reported mute state, including unknown after a failed query."""
+        if not self.coordinator.last_update_success:
+            return None
+        return self.coordinator.data.is_volume_muted
 
     @property
     def supported_features(self) -> MediaPlayerEntityFeature:
         """Only advertise controls which the device actually provides."""
+        if not self.coordinator.last_update_success:
+            return (
+                MediaPlayerEntityFeature.TURN_ON
+                if normalize_mac(self.coordinator.client.device.mac)
+                else MediaPlayerEntityFeature(0)
+            )
         commands = self.coordinator.data.commands
         features = MediaPlayerEntityFeature(0)
         for command, feature in (
@@ -57,11 +80,15 @@ class SonyMediaPlayerEntity(SonyEntity, MediaPlayerEntity):
                 features |= feature
         if "VolumeUp" in commands and "VolumeDown" in commands:
             features |= MediaPlayerEntityFeature.VOLUME_STEP
+        if self.coordinator.data.can_set_volume:
+            features |= MediaPlayerEntityFeature.VOLUME_SET
+        if self.coordinator.data.can_set_mute:
+            features |= MediaPlayerEntityFeature.VOLUME_MUTE
         if "Power" in commands:
             features |= (
                 MediaPlayerEntityFeature.TURN_ON | MediaPlayerEntityFeature.TURN_OFF
             )
-        elif self.coordinator.client.device.mac:
+        elif normalize_mac(self.coordinator.client.device.mac):
             features |= MediaPlayerEntityFeature.TURN_ON
         return features
 
@@ -100,8 +127,16 @@ class SonyMediaPlayerEntity(SonyEntity, MediaPlayerEntity):
 
     async def async_volume_up(self) -> None:
         """Increase volume by one step."""
-        await self.coordinator.async_send_command("VolumeUp")
+        await self._async_command("VolumeUp")
 
     async def async_volume_down(self) -> None:
         """Decrease volume by one step."""
-        await self.coordinator.async_send_command("VolumeDown")
+        await self._async_command("VolumeDown")
+
+    async def async_set_volume_level(self, volume: float) -> None:
+        """Set absolute volume through the advertised RenderingControl service."""
+        await self.coordinator.async_set_volume_level(volume)
+
+    async def async_mute_volume(self, mute: bool) -> None:
+        """Set mute through RenderingControl when its readback is available."""
+        await self.coordinator.async_mute_volume(mute)

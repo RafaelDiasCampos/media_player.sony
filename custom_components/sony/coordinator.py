@@ -2,12 +2,14 @@
 
 import asyncio
 from collections.abc import Callable
+from datetime import datetime
 import logging
 from typing import Any
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+from homeassistant.helpers.event import async_call_later
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 import requests
 
@@ -19,6 +21,7 @@ from .const import (
     DEVICE_SCAN_INTERVAL,
     DOMAIN,
 )
+from .discovery import normalize_mac
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -40,6 +43,34 @@ class SonyCoordinator(DataUpdateCoordinator[SonyStatus]):
         )
         self.client = SonyClient(entry.data)
         self._lock = asyncio.Lock()
+        self._wake_retries = 0
+        self._cancel_wake_refresh: Callable[[], None] | None = None
+        entry.async_on_unload(self._async_cancel_wake_refresh)
+
+    def _async_cancel_wake_refresh(self) -> None:
+        """Cancel pending wake checks when replaced or the entry is unloaded."""
+        self._wake_retries = 0
+        if self._cancel_wake_refresh:
+            self._cancel_wake_refresh()
+            self._cancel_wake_refresh = None
+
+    async def _async_refresh_after_wake(self, now: datetime) -> None:
+        """Check for boot completion without blocking the power-on service."""
+        self._cancel_wake_refresh = None
+        if self._wake_retries <= 0:
+            return
+        self._wake_retries -= 1
+        await self.async_refresh()
+        if (
+            not self.last_update_success
+            and self._wake_retries > 0
+            and not isinstance(self.last_exception, ConfigEntryAuthFailed)
+        ):
+            self._cancel_wake_refresh = async_call_later(
+                self.hass, 5, self._async_refresh_after_wake
+            )
+        else:
+            self._wake_retries = 0
 
     async def _async_update_data(self) -> SonyStatus:
         """Fetch state in an executor, without exposing library internals."""
@@ -81,6 +112,23 @@ class SonyCoordinator(DataUpdateCoordinator[SonyStatus]):
         await self._async_execute(self.client.send_command, command)
 
     async def async_set_power(self, power_on: bool) -> None:
-        """Set power and refresh both entities."""
+        """Set power, allowing a sleeping device to boot after Wake-on-LAN."""
+        self._async_cancel_wake_refresh()
         await self._async_execute(self.client.set_power, power_on)
-        await self.async_request_refresh()
+        if power_on and normalize_mac(self.client.device.mac):
+            self._wake_retries = 6
+            self._cancel_wake_refresh = async_call_later(
+                self.hass, 5, self._async_refresh_after_wake
+            )
+        else:
+            await self.async_refresh()
+
+    async def async_set_volume_level(self, volume: float) -> None:
+        """Set absolute volume and read back both entities' shared state."""
+        await self._async_execute(self.client.set_volume_level, volume)
+        await self.async_refresh()
+
+    async def async_mute_volume(self, mute: bool) -> None:
+        """Set mute explicitly and refresh the actual device state."""
+        await self._async_execute(self.client.mute_volume, mute)
+        await self.async_refresh()

@@ -3,7 +3,8 @@
 # Replace EVERY remote.sony_device_remote with your actual remote entity ID.
 # Uses only built-in Home Assistant cards; no additional frontend installation.
 # All 70 commands advertised by the tested BDV-E2100 are included once.
-# Buttons send individual key presses, not a named-input or absolute-volume setting.
+# Turn on/Turn off use power services; Turn on uses Wake-on-LAN when a MAC is known.
+# The other buttons send individual key presses.
 # The integration does not implement press-and-hold; hold/double-tap are disabled.
 # Reference: https://www.home-assistant.io/dashboards/button/
 # Reference: https://www.home-assistant.io/dashboards/actions/
@@ -19,6 +20,32 @@ cards:
   columns: 3
   square: false
   cards:
+  - type: button
+    name: Turn on
+    icon: 'mdi:power-on'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.turn_on
+      target:
+        entity_id: remote.sony_device_remote
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
+  - type: button
+    name: Turn off
+    icon: 'mdi:power-off'
+    icon_height: 28px
+    tap_action:
+      action: perform-action
+      perform_action: remote.turn_off
+      target:
+        entity_id: remote.sony_device_remote
+    hold_action:
+      action: none
+    double_tap_action:
+      action: none
   - type: button
     name: Power toggle
     icon: 'mdi:power'

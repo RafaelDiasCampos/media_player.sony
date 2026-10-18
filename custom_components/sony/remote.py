@@ -47,8 +47,10 @@ class SonyRemoteEntity(SonyEntity, RemoteEntity):
         self._attr_unique_id = f"remote.{host}_Remote"
 
     @property
-    def is_on(self) -> bool:
+    def is_on(self) -> bool | None:
         """Playing, paused and idle devices all count as powered on."""
+        if not self.coordinator.last_update_success:
+            return None
         return self.coordinator.data.state != MediaPlayerState.OFF
 
     @property

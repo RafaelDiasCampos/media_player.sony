@@ -181,13 +181,17 @@ async def test_invalid_remote_sequence_sends_nothing(hass, client, config_entry,
     client.send_command.assert_not_called()
 
 
-async def test_poll_failure_and_recovery(hass, client, config_entry):
-    """A network failure is unavailable, then both entities recover together."""
+@pytest.mark.parametrize("has_mac", [False, True])
+async def test_poll_failure_and_recovery(hass, client, config_entry, has_mac):
+    """Known MACs keep wake controls available with unknown power state."""
+    if not has_mac:
+        client.device.mac = None
     media_id, remote_id = await setup_entry(hass, config_entry)
     client.refresh.side_effect = SonyConnectionError("Offline")
     await config_entry.runtime_data.async_refresh()
-    assert hass.states.get(media_id).state == "unavailable"
-    assert hass.states.get(remote_id).state == "unavailable"
+    expected = "unknown" if has_mac else "unavailable"
+    assert hass.states.get(media_id).state == expected
+    assert hass.states.get(remote_id).state == expected
     client.refresh.side_effect = None
     client.refresh.return_value = SonyStatus(MediaPlayerState.PAUSED, COMMANDS)
     await config_entry.runtime_data.async_refresh()
@@ -196,8 +200,9 @@ async def test_poll_failure_and_recovery(hass, client, config_entry):
 
 
 async def test_initial_connection_failure_is_retried(hass, client, config_entry):
-    """Let Home Assistant retry initial setup instead of creating broken entities."""
+    """Without a known MAC, unreachable entries still retry initial setup."""
     config_entry.add_to_hass(hass)
+    client.device.mac = None
     client.refresh.side_effect = SonyConnectionError("Offline")
     assert not await hass.config_entries.async_setup(config_entry.entry_id)
     assert config_entry.state == ConfigEntryState.SETUP_RETRY

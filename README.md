@@ -20,12 +20,17 @@ Python 3.14**.
 
 | Device | Testing confirmed |
 | --- | --- |
-| **Sony BDV-E2100** | User-confirmed successful PIN pairing and integration setup, working media-player and remote entities, and discovery of **70 advertised remote commands** with version 2.1.1. |
+| **Sony BDV-E2100** | User-confirmed successful PIN pairing and integration setup, working media-player and remote entities, and discovery of **70 advertised remote commands** with version 2.1.1. A direct RenderingControl query also confirmed volume readback while reproducing TV audio. |
 
 The [BDV-E2100 dashboard example](examples/sony-bdv-e2100-remote.yaml) includes
 all 70 commands reported by that device. Each individual button has not been
 independently verified; some advertised keys apply only to particular inputs,
 regions or related Sony models. Other models and firmware still need testing.
+
+The BDV-E2100 advertises `GetVolume`, `SetVolume`, `GetMute` and `SetMute` on a
+0–100 volume scale. The confirmed physical-device query returned volume `73`
+while using TV audio with no disc loaded. Absolute volume setting and mute are
+covered by simulated HTTP tests; they still need confirmation on physical hardware.
 
 Automated tests use simulated Sony HTTP responses separately from this physical
 device report. They cover registration, single-use PINs, setup, reload,
@@ -35,9 +40,10 @@ reauthentication, entity behavior and command delivery.
 
 1. **Discover the device's services.** Home Assistant reads the Sony's UPnP
    descriptions using discovered URLs or manually configured ports. It follows
-   the advertised CERS/IRCC endpoints to read the remote command list and system information. Where
-   supported, it also discovers AVTransport playback status and a MAC address
-   for Wake-on-LAN.
+   the advertised CERS/IRCC endpoints to read the remote command list and system
+   information. Where supported, it also discovers AVTransport playback status, RenderingControl
+   audio capabilities and a MAC address for Wake-on-LAN. Audio support follows
+   the advertised service/control URLs, action names and volume range.
 2. **Pair once.** Devices requiring registration display a PIN on the connected
    TV. Successful pairing saves the registration cookies, where provided, in the
    Home Assistant config entry. Later setup and reload verify access using that
@@ -46,23 +52,74 @@ reauthentication, entity behavior and command delivery.
    Assistant asks you to authenticate the existing entry again.
 3. **Create two entities.** The `media_player` entity provides the standard
    playback, volume-step and power controls supported by the advertised keys.
+   Devices with usable RenderingControl audio queries also report volume and
+   mute state, with an absolute-volume slider and mute control when the matching
+   setters are advertised.
    The `remote` entity sends every advertised command through
    `remote.send_command`. Home Assistant's default remote widget shows a power
    toggle; use actions or the dashboard example for the additional buttons.
 4. **Keep state updated.** Both entities share one poll every 60 seconds.
-   Remote command sequences and media-player playback/power actions also request
-   a refresh. AVTransport supplies playback state where available. Legacy devices
-   may expose only reachability rather than a reliable standby state.
+   Remote command sequences and media-player playback, power and volume actions
+   also request a refresh. AVTransport supplies playback state where available.
+   RenderingControl supplies volume and mute readings independently; a failed
+   optional audio query leaves that value unknown while the remote remains usable.
+   Legacy devices may expose only reachability rather than a reliable standby state.
 5. **Control over the local network.** IRCC commands are sent directly to the
    Sony device as HTTP/SOAP requests. Commands and polling are serialized, and
    network operations run outside Home Assistant's event loop. Connection errors
-   make the entities unavailable; rejected credentials trigger reauthentication.
+   on the main connection leave playback state unknown when a saved MAC allows
+   Wake-on-LAN, or make the entities unavailable otherwise. Rejected CERS
+   credentials trigger reauthentication. DLNA audio-access failures are handled
+   separately.
 
 Remote commands are **button presses**. For example, `BDV:Function` cycles inputs
 and `BDV:SoundModeUp` steps through sound modes. These keys do not provide a
-named-input selector, absolute volume setting or feedback about the selected
-sound mode. Available keys come from the device rather than a fixed list shared
-by every Sony model.
+named-input selector or feedback about the selected sound mode. Absolute volume
+and mute setters use the separate RenderingControl service when supported.
+Available keys come from the device rather than a fixed list shared by every
+Sony model.
+
+## Volume, mute and current mode
+
+Version **2.3.0** adds volume and mute support through UPnP RenderingControl.
+The media player's `volume_level` attribute uses Home Assistant's **0–1** scale;
+for the BDV-E2100, a device reading of `73` becomes `0.73` (73% in the UI).
+This percentage describes the advertised network volume scale. It is not a dB
+measurement or a claim about the number shown on the front panel.
+
+Use the volume slider or standard Home Assistant actions. Replace the entity ID
+with the one shown in **Developer tools > States**:
+
+```yaml
+action: media_player.volume_set
+target:
+  entity_id: media_player.sony_device
+data:
+  volume_level: 0.3
+```
+
+```yaml
+action: media_player.volume_mute
+target:
+  entity_id: media_player.sony_device
+data:
+  is_volume_muted: true
+```
+
+The integration reads `GetVolume` and `GetMute`, and uses `SetVolume` and
+`SetMute` for explicit changes. Mute is not emulated by sending a toggle button.
+Each setter is offered only when its action is advertised and the related
+readback succeeds. Failed or invalid readings become unknown and are retried on
+the next poll. Devices without these services retain their existing controls.
+Changes from a physical remote are picked up by the shared 60-second poll;
+actions sent through this integration request an immediate refresh.
+
+**Current input and sound mode are not reported yet.** On the tested BDV-E2100,
+the observed CERS `getStatus` response contained only `party.status=idle`;
+this is the PARTY streaming status. `getContentInformation` returned
+`DI01 NoDisc`, and RenderingControl listed only the `FactoryDefaults` preset.
+These responses do not establish an API for reading the selected TV/Bluetooth
+input or sound mode. The integration does not infer either value from button presses.
 
 ## Automatic discovery and address updates
 
@@ -91,8 +148,8 @@ IP addresses. A device with its network interface fully asleep may not advertise
 until it wakes.
 
 Automatic discovery and IP-change recovery are covered by simulated Sony network
-tests. Physical BDV-E2100 testing so far covers the pairing/setup and command
-discovery described above.
+tests. Physical BDV-E2100 testing so far covers the pairing/setup, command
+discovery and volume query described above.
 
 ## Install with HACS
 
@@ -104,7 +161,7 @@ discovery described above.
    select **Add integration** and search for **Sony Legacy API** to enter its
    address manually.
 
-This fork includes the updated code (integration version **2.2.0**) on its
+This fork includes the updated code (integration version **2.3.0**) on its
 `master` branch. The older
 `c264add` revision lacks required HACS metadata and remains incompatible with
 HACS. Add this fork's URL to HACS, as shown above.
@@ -162,22 +219,50 @@ match those advertised by the individual device; firmware and models can differ.
 
 The media player exposes playback, track navigation, volume steps and power
 controls when the corresponding commands are advertised by the device.
-It does not advertise URL playback or absolute volume/mute controls that the
-legacy library cannot implement reliably. To toggle mute, send `Mute` through
-the remote when it appears in that remote's `commands` attribute.
+RenderingControl adds volume readback, an absolute-volume slider, mute status
+and explicit mute control when supported. URL playback is not implemented.
+On devices without a mute setter, the remote's advertised `Mute` command is
+still available as a toggle.
 
 Both entities share one poll every 60 seconds. Remote command sequences and
-media-player playback/power actions request a state refresh.
+media-player playback, power and volume actions request a state refresh.
 Playback state comes from AVTransport when available; otherwise the media player
 shows `on`. The remote reports `on` for playing, paused and idle devices.
-Communication failures show `unavailable`. Scalar API devices with a confirmed
-`standby` or `off` power status show `off`; older CERS/IRCC devices may only expose
+On a communication failure, a device with a known MAC shows `unknown` and keeps
+its power-on action available; other media controls are hidden until it responds.
+A device without a usable MAC shows `unavailable`. Scalar API devices with a
+confirmed `standby` or `off` power status show `off`; older CERS/IRCC devices may only expose
 reachability, so their precise standby state cannot always be determined.
 
-Wake-on-LAN requires the device to advertise a MAC address and support network
-standby/remote start. Enable those options if available. A device which fully
-shuts down networking may be unavailable and require its physical remote to wake
-it, particularly while Home Assistant is starting up.
+### Turn on with Wake-on-LAN
+
+The integration learns and saves the MAC advertised by Sony's WOL function.
+After initial setup while the Sony is awake, use either `media_player.turn_on`
+or `remote.turn_on` to send a Wake-on-LAN magic packet to that MAC. The packet
+uses the local broadcast address `255.255.255.255` and UDP port `9`, so it does
+not depend on the Sony's current IP address.
+
+On the **BDV-E2100**, enable **Setup > Network Settings > Remote Start > On**.
+Sony's [operating instructions](https://retronik.silicium.org/DOCUMENTS/Audiovideo/Sony/Sony-BDV-E2100-Owners-Manual.pdf)
+(page 51) describe this setting as enabling network power-on from standby.
+Home Assistant and the device must have a network path that permits the broadcast.
+
+```yaml
+action: media_player.turn_on
+target:
+  entity_id: media_player.sony_device
+```
+
+Power-on stays available when the device stops answering HTTP, including when
+Home Assistant restarts while an already configured Sony is asleep. Its state
+remains `unknown` until communication succeeds. After sending WOL, the integration
+checks for recovery every five seconds, up to six times, then continues normal
+60-second polling. These checks run in the background. A wake request never
+follows the magic packet with a potentially conflicting `Power` toggle.
+
+Devices without a known MAC retain the existing IRCC power behavior. Wake-packet
+generation, startup while asleep and recovery are covered by simulated tests;
+physical BDV-E2100 wake-up still needs confirmation with Remote Start enabled.
 
 ### Remote commands
 
@@ -236,7 +321,8 @@ This is a **dashboard card**, so paste it into the card editor. The integration
 itself is configured through **Devices & services**; the example does not belong
 in `configuration.yaml`.
 
-The dashboard groups power, volume, input switching, navigation, playback,
+The dashboard includes separate turn-on/turn-off actions and all 70 advertised
+remote commands. It groups power, volume, input switching, navigation, playback,
 sound settings, color and number keys, browser/app keys and model-specific extras.
 Some useful commands are:
 
@@ -294,6 +380,10 @@ pytest
 
 Tests cover config entries, PIN pairing and reauthentication, state updates,
 entity registry compatibility, services, IRCC request headers and error handling.
+Audio tests also cover the required SOAP encoding, volume scaling and steps,
+mute setters, discovered service URLs, optional query failures and recovery.
+Power tests check the WOL packet, offline startup, background boot checks and
+cancellation when the integration unloads.
 Sockets are disabled during tests; Sony responses are mocked. CI also runs the
 official Hassfest and HACS validation actions.
 
