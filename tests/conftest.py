@@ -1,6 +1,6 @@
 """Fixtures using Home Assistant's actual integration test harness."""
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from homeassistant.components.media_player import MediaPlayerState
 import pytest
@@ -40,6 +40,17 @@ def custom_integrations(enable_custom_integrations):
     """Allow this repository's custom integration to be loaded."""
 
 
+@pytest.fixture(autouse=True)
+def discovery_services(hass):
+    """Keep the shared discovery APIs real without opening multicast sockets."""
+    hass.config.components.add("ssdp")
+    with patch(
+        "homeassistant.components.ssdp.async_get_discovery_info_by_st",
+        new=AsyncMock(return_value=[]),
+    ):
+        yield
+
+
 @pytest.fixture
 def config_entry():
     """An entry saved by version 2.0.0, without the new optional name."""
@@ -63,6 +74,7 @@ def client():
     client.pin = "0123"
     client.cookies = []
     client.model = "BDV-E2100"
+    client.udn = None
     client.authenticate.return_value = AuthenticationResult.SUCCESS
     client.refresh.return_value = SonyStatus(MediaPlayerState.PLAYING, COMMANDS)
     with (

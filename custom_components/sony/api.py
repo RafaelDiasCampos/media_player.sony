@@ -19,14 +19,18 @@ from .const import (
     CONF_APP_PORT,
     CONF_COOKIES,
     CONF_DMR_PORT,
+    CONF_DMR_URL,
     CONF_IRCC_PORT,
+    CONF_IRCC_URL,
     CONF_MAC_ADDRESS,
     CONF_PIN,
+    CONF_UDN,
     DEFAULT_APP_PORT,
     DEFAULT_DEVICE_NAME,
     DEFAULT_DMR_PORT,
     DEFAULT_IRCC_PORT,
 )
+from .discovery import identity_matches, normalize_mac, normalize_udn
 
 
 class SonyConnectionError(Exception):
@@ -35,6 +39,10 @@ class SonyConnectionError(Exception):
 
 class SonyAuthenticationError(Exception):
     """The device rejected registration or saved credentials."""
+
+
+class SonyDeviceMismatch(SonyConnectionError):
+    """The configured address now belongs to a different physical device."""
 
 
 @dataclass(frozen=True)
@@ -70,11 +78,18 @@ class SonyClient:
             ircc_port=data.get(CONF_IRCC_PORT, DEFAULT_IRCC_PORT),
         )
         self.device.mac = data.get(CONF_MAC_ADDRESS)
+        if url := data.get(CONF_DMR_URL):
+            self.device.dmr_url = url
+        if url := data.get(CONF_IRCC_URL):
+            self.device.ircc_url = url
         self.device.cookies = requests.cookies.RequestsCookieJar()
         for cookie in data.get(CONF_COOKIES, []):
             self.device.cookies.set_cookie(requests.cookies.create_cookie(**cookie))
         self.pin = data.get(CONF_PIN)
         self.model: str | None = None
+        self.udn: str | None = None
+        self._expected_mac = normalize_mac(data.get(CONF_MAC_ADDRESS))
+        self._expected_udn = normalize_udn(data.get(CONF_UDN))
         self._discovered = False
         self._authenticated = False
 
@@ -115,16 +130,22 @@ class SonyClient:
             raise SonyConnectionError("Sony returned no response")
         return response
 
-    def authenticate(
-        self, pin: str | None = None, *, resume: bool = False
-    ) -> AuthenticationResult:
-        """Discover and register, optionally using the PIN displayed on the TV."""
-        if not self._discovered:
+    def discover(self) -> None:
+        """Read identity without credentials before trusting a changed address."""
+        if self._discovered:
+            return
+        saved_cookies, saved_mac = self.device.cookies, self.device.mac
+        self.device.cookies = requests.cookies.RequestsCookieJar()
+        self.device.mac = None
+        try:
             response = self._request(self.device.dmr_url, HttpMethod.GET)
             try:
                 description = ElementTree.fromstring(response.text)
                 self.model = description.findtext(
                     ".//{urn:schemas-upnp-org:device-1-0}modelName"
+                )
+                self.udn = normalize_udn(
+                    description.findtext(".//{urn:schemas-upnp-org:device-1-0}UDN")
                 )
                 self.device.init_device()
             except (
@@ -140,7 +161,28 @@ class SonyClient:
                 raise SonyConnectionError(
                     "The device did not advertise an IRCC service"
                 )
+            observed_mac = normalize_mac(self.device.mac)
+            if (
+                (self._expected_mac and observed_mac)
+                or (self._expected_udn and self.udn)
+            ) and not identity_matches(
+                self._expected_mac, self._expected_udn, observed_mac, self.udn
+            ):
+                raise SonyDeviceMismatch(
+                    "The address belongs to a different Sony device"
+                )
             self._discovered = True
+        finally:
+            if saved_cookies:
+                self.device.cookies.update(saved_cookies)
+            if not self.device.mac:
+                self.device.mac = saved_mac
+
+    def authenticate(
+        self, pin: str | None = None, *, resume: bool = False
+    ) -> AuthenticationResult:
+        """Discover and register, optionally using the PIN displayed on the TV."""
+        self.discover()
 
         if resume and "register" in self.device.actions:
             # A displayed PIN may be single-use. Check the registered client ID

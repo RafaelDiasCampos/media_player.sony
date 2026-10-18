@@ -24,17 +24,30 @@
       "reauth_confirm": {
         "title": "Pair your Sony device again",
         "description": "Turn on the Sony device and enable remote access. Continue to request a new PIN on the TV."
+      },
+      "discovery_confirm": {
+        "title": "Set up discovered Sony device",
+        "description": "Found {name} at {host}. Turn on the Sony device and enable remote access. Continue to pair it; a PIN may appear on the connected TV.",
+        "data": {
+          "name": "Name"
+        }
       }
     },
     "error": {
       "cannot_connect": "Cannot connect. Check the address, ports, network and remote access settings.",
       "invalid_auth": "The PIN was rejected. Enter the PIN shown on the TV.",
       "invalid_host": "Enter an IP address or hostname without a scheme, port or path.",
-      "unknown": "Unexpected error. Check the Home Assistant logs."
+      "unknown": "Unexpected error. Check the Home Assistant logs.",
+      "wrong_device": "This address belongs to a different Sony device."
     },
     "abort": {
       "already_configured": "This device is already configured.",
-      "reauth_successful": "Authentication was successful."
-    }
+      "reauth_successful": "Authentication was successful.",
+      "cannot_connect": "Cannot connect to the discovered Sony device.",
+      "invalid_discovery_info": "The device did not advertise a supported description URL or valid address.",
+      "not_configured": "This MAC address does not belong to a configured Sony device.",
+      "unknown": "Unexpected discovery error. Check the Home Assistant logs."
+    },
+    "flow_title": "{name} ({host})"
   }
 }

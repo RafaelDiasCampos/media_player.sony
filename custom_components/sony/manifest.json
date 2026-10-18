@@ -5,6 +5,14 @@
     "@RafaelDiasCampos"
   ],
   "config_flow": true,
+  "dependencies": [
+    "ssdp"
+  ],
+  "dhcp": [
+    {
+      "registered_devices": true
+    }
+  ],
   "documentation": "https://github.com/RafaelDiasCampos/media_player.sony",
   "integration_type": "device",
   "iot_class": "local_polling",
@@ -12,5 +20,18 @@
   "requirements": [
     "sonyapilib==0.5.0"
   ],
-  "version": "2.1.1"
+  "ssdp": [
+    {
+      "st": "urn:schemas-sony-com:service:IRCC:1"
+    },
+    {
+      "manufacturer": "Sony Corporation",
+      "st": "urn:schemas-upnp-org:device:MediaRenderer:1"
+    },
+    {
+      "manufacturer": "Sony",
+      "st": "urn:schemas-upnp-org:device:MediaRenderer:1"
+    }
+  ],
+  "version": "2.2.0"
 }

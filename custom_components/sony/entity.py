@@ -4,7 +4,7 @@ from homeassistant.const import CONF_HOST, CONF_NAME
 from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DEFAULT_DEVICE_NAME, DOMAIN
+from .const import CONF_ENTITY_ID_HOST, DEFAULT_DEVICE_NAME, DOMAIN
 from .coordinator import SonyCoordinator
 
 
@@ -18,7 +18,7 @@ class SonyEntity(CoordinatorEntity[SonyCoordinator]):
         super().__init__(coordinator)
         entry = coordinator.config_entry
         device = coordinator.client.device
-        host = entry.data[CONF_HOST]
+        host = entry.data.get(CONF_ENTITY_ID_HOST, entry.data[CONF_HOST])
         self._attr_device_info = DeviceInfo(
             identifiers={(DOMAIN, device.mac or host)},
             name=entry.data.get(CONF_NAME, DEFAULT_DEVICE_NAME),

@@ -1,5 +1,20 @@
 # Changelog
 
+## 2.2.0
+
+- Discover compatible Sony CERS/IRCC devices using Home Assistant SSDP/UPnP,
+  including their advertised description URLs and ports.
+- Match configured devices by MAC address from DHCP discovery or by observed
+  MAC/UPnP identity from SSDP, then reconnect automatically at the new IP.
+- Reuse pairing credentials after address changes, including host-scoped cookies,
+  and keep existing config entries and entity identities stable.
+- Confirm newly discovered devices before starting registration and avoid
+  duplicate entries or pairing prompts for already configured hardware.
+- Read device identity without saved credentials before reconnecting, and reject
+  a contradictory MAC address instead of treating another Sony as the same unit.
+- Add Home Assistant regression tests for DHCP and SSDP address changes, UPnP
+  identity fallback, registration reuse, duplicate matching and discovered setup.
+
 ## 2.1.1
 
 - Reuse the registered client and saved authentication cookies on setup and

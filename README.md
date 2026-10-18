@@ -34,8 +34,8 @@ reauthentication, entity behavior and command delivery.
 ## How the integration works
 
 1. **Discover the device's services.** Home Assistant reads the Sony's UPnP
-   descriptions using the configured ports. It follows the advertised CERS/IRCC
-   endpoints to read the remote command list and system information. Where
+   descriptions using discovered URLs or manually configured ports. It follows
+   the advertised CERS/IRCC endpoints to read the remote command list and system information. Where
    supported, it also discovers AVTransport playback status and a MAC address
    for Wake-on-LAN.
 2. **Pair once.** Devices requiring registration display a PIN on the connected
@@ -64,16 +64,47 @@ named-input selector, absolute volume setting or feedback about the selected
 sound mode. Available keys come from the device rather than a fixed list shared
 by every Sony model.
 
+## Automatic discovery and address updates
+
+Version **2.2.0** adds automatic discovery through Home Assistant's shared
+**SSDP/UPnP** service. Turn on the Sony device and connect it to the same local
+network as Home Assistant. Compatible devices appear under **Settings > Devices
+& services > Discovered**. Select **Configure**, confirm the device, and complete
+PIN pairing if requested. Discovery uses the advertised description paths and
+ports, including devices with separate IRCC and media-renderer descriptions.
+
+For a configured device, the integration matches its **MAC address** when Home
+Assistant receives DHCP discovery information. SSDP discoveries also match the
+Sony's observed MAC address or stable **UPnP device ID (UDN)**. When a matching
+device announces a different IP, the saved address is updated and the connection
+reloads automatically, reusing the existing registration.
+
+Home Assistant learns and saves these hardware identifiers when it connects to
+the Sony. New entries use a hardware-based identity where available. Matching
+discovery events update an existing entry instead of adding a duplicate.
+
+Discovery depends on local network visibility: SSDP multicast and the relevant
+DHCP discovery information must reach Home Assistant. The standard Home
+Assistant configuration includes SSDP and DHCP. An address change is handled
+when matching discovery information arrives; it is not detected by scanning all
+IP addresses. A device with its network interface fully asleep may not advertise
+until it wakes.
+
+Automatic discovery and IP-change recovery are covered by simulated Sony network
+tests. Physical BDV-E2100 testing so far covers the pairing/setup and command
+discovery described above.
+
 ## Install with HACS
 
 1. Open **HACS**, then **⋮ > Custom repositories**.
 2. Add `https://github.com/RafaelDiasCampos/media_player.sony` with type **Integration**.
 3. Find **Sony Legacy API**, open it and select **Download**.
 4. Restart Home Assistant.
-5. Open **Settings > Devices & services > Add integration** and search for
-   **Sony Legacy API**.
+5. Open **Settings > Devices & services**. Configure a discovered Sony device, or
+   select **Add integration** and search for **Sony Legacy API** to enter its
+   address manually.
 
-This fork includes the updated code (integration version **2.1.1**) on its
+This fork includes the updated code (integration version **2.2.0**) on its
 `master` branch. The older
 `c264add` revision lacks required HACS metadata and remains incompatible with
 HACS. Add this fork's URL to HACS, as shown above.
@@ -95,12 +126,13 @@ through **Settings > Devices & services**.
 ## Pair a device
 
 Keep Home Assistant and the Sony device on the **same subnet**. Sony firmware
-may reject requests from a different subnet even when routing works. Reserve a
-static IP address and turn on the device and its connected TV before pairing.
+may reject requests from a different subnet even when routing works. Turn on
+the device and its connected TV before pairing.
 Enable the device's remote-control/remote-start options and enter its remote
 registration screen if required by its firmware.
 
-Enter the device's IPv4 address or hostname **without** `http://`, a port or a path.
+For manual setup, enter the device's IPv4 address or hostname **without**
+`http://`, a port or a path.
 Choose a display name and, if necessary, change the three service ports. Leave
 the PIN empty (or use `0000`) to request a PIN on the TV. Enter the displayed PIN
 in the next step. Devices which do not require a PIN finish registration directly.
@@ -125,14 +157,6 @@ The following override was documented by this project before this update:
 
 The BDV-E2100 has been tested with this fork. Its service ports still need to
 match those advertised by the individual device; firmware and models can differ.
-
-Existing version 2.0.0 config entries and entity unique IDs are retained. You do
-not need YAML configuration or a `sony.conf` file. If the device revokes its saved
-registration, Home Assistant offers a reauthentication flow for the existing entry.
-The displayed PIN can be single-use. Successful pairing saves the registration
-cookies, where provided, and setup verifies the approved client without starting
-registration again. Updating from 2.1.0 may require one new PIN through the
-existing entry's **Reconfigure** prompt; restarting then reuses that registration.
 
 ## Controls
 
@@ -245,6 +269,9 @@ and `SEN` may appear even when their network services are no longer available.
 - **Only a few controls appear:** the standard entity widgets show basic
   controls. Use `remote.send_command` or the dashboard example to access the full
   advertised command list.
+- **Discovery does not appear:** turn on the device and check that its SSDP
+  multicast advertisements can reach Home Assistant on the same subnet. Routers,
+  VLANs, guest Wi-Fi and wireless client isolation can block discovery traffic.
 - **A listed button has no effect:** check the current input and the device's
   capabilities. The advertised list may contain keys for other operating modes
   or related models, and retired app services cannot be restored by sending a key.

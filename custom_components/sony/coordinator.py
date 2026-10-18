@@ -12,7 +12,13 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, Upda
 import requests
 
 from .api import SonyAuthenticationError, SonyClient, SonyConnectionError, SonyStatus
-from .const import CONF_COOKIES, DEVICE_SCAN_INTERVAL, DOMAIN
+from .const import (
+    CONF_COOKIES,
+    CONF_MAC_ADDRESS,
+    CONF_UDN,
+    DEVICE_SCAN_INTERVAL,
+    DOMAIN,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -44,11 +50,18 @@ class SonyCoordinator(DataUpdateCoordinator[SonyStatus]):
                 raise ConfigEntryAuthFailed(str(err)) from err
             except (SonyConnectionError, requests.RequestException, ValueError) as err:
                 raise UpdateFailed(str(err)) from err
-            cookies = self.client.cookies
-            if cookies != self.config_entry.data.get(CONF_COOKIES, []):
+            updates = {CONF_COOKIES: self.client.cookies}
+            if self.client.udn:
+                updates[CONF_UDN] = self.client.udn
+            if self.client.device.mac:
+                updates[CONF_MAC_ADDRESS] = self.client.device.mac
+            if any(
+                self.config_entry.data.get(key) != value
+                for key, value in updates.items()
+            ):
                 self.hass.config_entries.async_update_entry(
                     self.config_entry,
-                    data={**self.config_entry.data, CONF_COOKIES: cookies},
+                    data={**self.config_entry.data, **updates},
                 )
             return status
 

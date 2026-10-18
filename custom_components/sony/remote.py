@@ -18,6 +18,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ServiceValidationError
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
+from .const import CONF_ENTITY_ID_HOST
 from .coordinator import SonyConfigEntry, SonyCoordinator
 from .entity import SonyEntity
 
@@ -40,7 +41,9 @@ class SonyRemoteEntity(SonyEntity, RemoteEntity):
     def __init__(self, coordinator: SonyCoordinator) -> None:
         """Preserve the unique ID used by existing installations."""
         super().__init__(coordinator)
-        host = coordinator.config_entry.data[CONF_HOST]
+        host = coordinator.config_entry.data.get(
+            CONF_ENTITY_ID_HOST, coordinator.config_entry.data[CONF_HOST]
+        )
         self._attr_unique_id = f"remote.{host}_Remote"
 
     @property

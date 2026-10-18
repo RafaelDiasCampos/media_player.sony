@@ -24,17 +24,30 @@
       "reauth_confirm": {
         "title": "Parear novamente o dispositivo Sony",
         "description": "Ligue o dispositivo Sony e habilite o controle remoto pela rede. Continue para solicitar um novo PIN na TV."
+      },
+      "discovery_confirm": {
+        "title": "Configurar dispositivo Sony descoberto",
+        "description": "Encontrado {name} em {host}. Ligue o dispositivo Sony e habilite o controle remoto pela rede. Continue para parear; um PIN pode aparecer na TV conectada.",
+        "data": {
+          "name": "Nome"
+        }
       }
     },
     "error": {
       "cannot_connect": "Não foi possível conectar. Verifique o endereço, as portas, a rede e as configurações de controle remoto.",
       "invalid_auth": "PIN recusado. Digite o código exibido na TV.",
       "invalid_host": "Informe um IP ou nome de host, sem protocolo, porta ou caminho.",
-      "unknown": "Erro inesperado. Consulte os registros do Home Assistant."
+      "unknown": "Erro inesperado. Consulte os registros do Home Assistant.",
+      "wrong_device": "Este endereço pertence a outro dispositivo Sony."
     },
     "abort": {
       "already_configured": "Este dispositivo já está configurado.",
-      "reauth_successful": "Autenticação realizada com sucesso."
-    }
+      "reauth_successful": "Autenticação realizada com sucesso.",
+      "cannot_connect": "Não foi possível conectar ao dispositivo Sony descoberto.",
+      "invalid_discovery_info": "O dispositivo não anunciou uma URL de descrição compatível ou um endereço válido.",
+      "not_configured": "Este endereço MAC não pertence a um dispositivo Sony configurado.",
+      "unknown": "Erro inesperado de descoberta. Consulte os registros do Home Assistant."
+    },
+    "flow_title": "{name} ({host})"
   }
 }

@@ -24,17 +24,30 @@
       "reauth_confirm": {
         "title": "Réassocier votre appareil Sony",
         "description": "Allumez l’appareil Sony et autorisez le contrôle à distance. Continuez pour afficher un nouveau code PIN sur le téléviseur."
+      },
+      "discovery_confirm": {
+        "title": "Configurer l’appareil Sony découvert",
+        "description": "Appareil {name} trouvé à {host}. Allumez l’appareil Sony et activez le contrôle à distance. Continuez pour l’associer ; un code PIN peut apparaître sur le téléviseur connecté.",
+        "data": {
+          "name": "Nom"
+        }
       }
     },
     "error": {
       "cannot_connect": "Connexion impossible. Vérifiez l’adresse, les ports, le réseau et les paramètres de contrôle à distance.",
       "invalid_auth": "Code PIN refusé. Saisissez le code affiché sur le téléviseur.",
       "invalid_host": "Saisissez une adresse IP ou un nom d’hôte, sans préfixe, port ni chemin.",
-      "unknown": "Erreur inattendue. Consultez les journaux de Home Assistant."
+      "unknown": "Erreur inattendue. Consultez les journaux de Home Assistant.",
+      "wrong_device": "Cette adresse appartient à un autre appareil Sony."
     },
     "abort": {
       "already_configured": "Cet appareil est déjà configuré.",
-      "reauth_successful": "Authentification réussie."
-    }
+      "reauth_successful": "Authentification réussie.",
+      "cannot_connect": "Impossible de se connecter à l’appareil Sony découvert.",
+      "invalid_discovery_info": "L’appareil n’a pas annoncé une URL de description prise en charge ou une adresse valide.",
+      "not_configured": "Cette adresse MAC ne correspond à aucun appareil Sony configuré.",
+      "unknown": "Erreur de découverte inattendue. Consultez les journaux de Home Assistant."
+    },
+    "flow_title": "{name} ({host})"
   }
 }
